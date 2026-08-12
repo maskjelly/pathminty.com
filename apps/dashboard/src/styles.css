@@ -423,7 +423,7 @@ body {
 /* —— Insights —— */
 .insight-strip {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0;
   padding: 0;
   border-bottom: 1px solid var(--border);
@@ -500,6 +500,29 @@ body {
   margin: 8px 0 12px;
   color: var(--text-secondary);
   font-size: 14px;
+  line-height: 1.4;
+}
+.live-empty-steps {
+  margin: 10px 0 12px;
+  padding-left: 1.2rem;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.live-empty-steps li {
+  margin-bottom: 8px;
+}
+.live-empty-steps li:last-child {
+  margin-bottom: 0;
+}
+.live-empty-steps strong {
+  color: var(--text);
+  font-weight: 600;
+}
+.live-empty-note {
+  margin: 0 0 14px;
+  color: var(--text-muted);
+  font-size: 12px;
   line-height: 1.4;
 }
 .live-empty button,

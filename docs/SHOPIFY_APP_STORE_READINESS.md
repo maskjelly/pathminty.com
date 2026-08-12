@@ -51,18 +51,22 @@ Payment, payment facilitator, purchase options, product sourcing, checkout
 customization, sales channel, post-purchase, mobile app builder, and donation do not
 apply to the current extensions or requested scopes.
 
+## Soft-launch scope (current)
+
+Ship heatmaps, site canvas / journeys, and session recordings without order revenue.
+Order join code exists but is paused until Level 1 protected-customer-data is approved.
+
 ## Submission blockers outside the code review
 
-- Deploy the isolated staging and production Workers behind the final custom domains.
-- Build the commerce queue consumer and order/refund reconciliation.
-- Request Level 1 protected customer data access for order records.
+- Deploy staging and production Workers behind final custom domains when leaving dev.
 - Publish privacy policy, terms, and support pages using the real legal entity and
   email.
 - Choose free beta or Shopify Billing and match the App Store pricing section.
 - Configure emergency developer contact, reviewer credentials, listing media, and a
   narrated review screencast.
-- Run install, consent, event capture, purchase, refund, disconnect, uninstall, data
-  deletion, and reinstall tests on the demo store.
+- Run install, consent, event capture, disconnect, uninstall, data deletion, and
+  reinstall tests on the demo store.
+- Later: PCD Level 1, then enable order/refund webhooks for revenue join.
 
 ## Verified development evidence
 

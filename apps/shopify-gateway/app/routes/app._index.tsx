@@ -401,7 +401,7 @@ export default function Setup() {
   };
 
   return (
-    <s-page heading="Connect PathMinty">
+    <s-page heading="PathMinty">
       {connected ? (
         <s-button
           slot="primary-action"
@@ -409,7 +409,7 @@ export default function Setup() {
           {...(isOpeningDashboard ? { loading: true } : {})}
           variant="primary"
         >
-          Open analytics dashboard
+          Open dashboard
         </s-button>
       ) : (
         <s-button
@@ -418,39 +418,40 @@ export default function Setup() {
           {...(isBusy ? { loading: true } : {})}
           variant="primary"
         >
-          Install tracking
+          Connect storefront
         </s-button>
       )}
 
-      <s-section heading="Your storefront connection">
+      <s-section heading="Storefront analytics">
         <s-stack direction="block" gap="base">
           <s-paragraph>
-            PathMinty collects consent-aware storefront behaviour. Revenue paths appear
-            only after verified Shopify order and refund events are processed.
+            See how shoppers move through your store — page flow, click heatmaps, and
+            session recordings. Capture waits for analytics consent and never records
+            form values or keystrokes.
           </s-paragraph>
           <s-stack direction="inline" gap="base">
             <s-badge tone={connected ? "success" : "caution"}>
-              {connected ? "Customer events connected" : "Setup required"}
+              {connected ? "Connected" : "Setup required"}
             </s-badge>
             <s-text tone="neutral">{loaderData.shop}</s-text>
           </s-stack>
         </s-stack>
       </s-section>
 
-      <s-section heading="1. Connect Shopify customer events">
+      <s-section heading="1. Connect customer events">
         <s-paragraph>
-          Installs PathMinty's privacy-aware Web Pixel for page, product, cart,
-          checkout, and purchase events. No theme code is edited.
+          Installs PathMinty’s Web Pixel for page, product, cart, and checkout signals.
+          No theme files are edited.
         </s-paragraph>
         <s-button onClick={connect} {...(isBusy ? { loading: true } : {})}>
-          {connected ? "Reconnect customer events" : "Connect customer events"}
+          {connected ? "Reconnect" : "Connect"}
         </s-button>
       </s-section>
 
-      <s-section heading="2. Turn on session recording">
+      <s-section heading="2. Enable the recorder embed">
         <s-paragraph>
-          Shopify requires the merchant to enable app embeds. The theme editor opens
-          with PathMinty ready to activate; save once and recording begins.
+          In the theme editor, turn on the PathMinty Recorder app embed and save. This is
+          required once per theme.
         </s-paragraph>
         <s-button
           href={loaderData.themeEditorUrl}
@@ -461,32 +462,30 @@ export default function Setup() {
         </s-button>
       </s-section>
 
-      <s-section heading="3. See your first journey">
+      <s-section heading="3. Open the dashboard">
         <s-paragraph>
-          New clicks and sessions appear quickly. Revenue paths appear after Shopify
-          sends the matching order event.
+          Browse your storefront with analytics consent accepted, then open the
+          dashboard. Sessions and the site canvas update within about 15 seconds.
         </s-paragraph>
         <s-button
           onClick={openDashboard}
           disabled={!connected || isOpeningDashboard}
           {...(isOpeningDashboard ? { loading: true } : {})}
         >
-          Open PathMinty
+          Open dashboard
         </s-button>
       </s-section>
 
-      <s-section slot="aside" heading="Protected by default">
+      <s-section slot="aside" heading="Privacy defaults">
         <s-unordered-list>
           <s-list-item>
-            Form-field values and keystrokes are never recorded by session capture.
+            Form fields and keystrokes are never captured in session recordings.
           </s-list-item>
           <s-list-item>
-            Search terms come from Shopify customer events and obvious contact details
-            are masked.
+            Obvious contact details in search terms are masked.
           </s-list-item>
-          <s-list-item>URLs are stored without query strings.</s-list-item>
-          <s-list-item>Recording waits for analytics consent.</s-list-item>
-          <s-list-item>Shopify remains the source of revenue truth.</s-list-item>
+          <s-list-item>Storefront URLs drop query strings and fragments.</s-list-item>
+          <s-list-item>Recording waits for analytics consent when required.</s-list-item>
         </s-unordered-list>
       </s-section>
 

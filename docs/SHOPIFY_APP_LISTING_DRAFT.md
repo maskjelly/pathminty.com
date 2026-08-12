@@ -8,29 +8,30 @@ PathMinty
 
 ## One-line summary
 
-Understand consented storefront behavior with heatmaps, journeys, and revenue context.
+See how shoppers move through your store with heatmaps, journeys, and recordings.
 
 ## Description
 
-PathMinty helps direct-to-consumer merchants see how shoppers move through their
-storefront. It collects consent-aware clicks, pointer movement, scroll depth, page
-activity, and standardized Shopify customer events. Once commerce processing is live,
-verified order and refund events provide net-revenue context for those journeys.
+PathMinty helps direct-to-consumer merchants understand consented storefront behavior.
+It captures privacy-aware clicks, hover attention, scroll depth, page routes, and
+Shopify customer events so you can inspect how people move from landing pages toward
+cart and checkout.
 
 Use PathMinty to:
 
-- compare click, scroll, and attention patterns across desktop and mobile;
-- inspect session timelines without recording keystrokes or form-field values;
-- study routes from landing page to checkout;
-- compare visited routes with verified net-revenue outcomes;
-- segment behavior by device and coarse geographic region where lawful and disclosed.
+- compare click and hover patterns across desktop and mobile;
+- explore a live site canvas of the pages shoppers visit;
+- open route heatmaps over real page previews;
+- replay privacy-masked session recordings;
+- spot which paths most often reach cart or checkout.
 
 ## Honest launch limits
 
-- Checkout-page DOM recording is not included.
-- The current recorder captures interaction events, not full visual DOM replay.
+- Checkout-page DOM recording is limited by Shopify checkout hosting.
 - Results appear only after analytics consent and successful data ingestion.
-- Insights need sufficient traffic and are not guarantees of future revenue.
+- Ad blockers and strict privacy browsers can prevent capture on some visits.
+- Insights need enough traffic to be meaningful; they are not sales guarantees.
+- Verified order-revenue join is planned after protected-customer-data approval.
 
 ## Required before publishing
 

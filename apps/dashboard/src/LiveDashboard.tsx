@@ -36,11 +36,11 @@ import {
   type DashboardDevice,
   type TimeQuery,
 } from "./api/sessions";
+import { BrandMark } from "./BrandMark";
 import { ActivityTimeline } from "./components/ActivityTimeline";
 import { HeatmapSurface } from "./components/HeatmapSurface";
 import { ReplayViewer } from "./components/ReplayViewer";
 import { SiteCanvas } from "./components/SiteCanvas";
-import { formatMoneyMinor } from "./money";
 
 type View = "Heatmaps" | "Recordings";
 type HeatmapPane = "map" | "route";
@@ -75,23 +75,35 @@ function relativeTime(iso: string) {
   return new Date(iso).toLocaleString();
 }
 
+function shopLabel(shopId: string) {
+  return shopId.replace(/\.myshopify\.com$/u, "");
+}
+
 function EmptySessions({ onRefresh }: { onRefresh: () => void }) {
   return (
     <section className="live-empty">
       <span className="live-empty-icon">
         <CursorClick size={22} />
       </span>
-      <p>No storefront recordings yet</p>
-      <h2>Create your first recording</h2>
-      <p>
-        1. Open Shopify Admin → Online Store → Themes → Customize → App embeds and
-        enable PathMinty Recorder.
-        <br />
-        2. Visit the storefront and accept analytics cookies if your region requires
-        consent.
-        <br />
-        3. Browse a couple of pages, then return here and refresh. Active sessions
-        appear within about 15 seconds.
+      <p>No traffic in this range</p>
+      <h2>Waiting for storefront sessions</h2>
+      <ol className="live-empty-steps">
+        <li>
+          In Shopify Admin, open <strong>Online Store → Themes → Customize → App embeds</strong>{" "}
+          and enable <strong>PathMinty Recorder</strong>, then save.
+        </li>
+        <li>
+          Visit the storefront and accept analytics cookies if your store requires
+          consent.
+        </li>
+        <li>
+          Browse a few pages (home, collection, product). Sessions appear here within
+          about 15 seconds.
+        </li>
+      </ol>
+      <p className="live-empty-note">
+        Ad blockers and strict privacy browsers can block capture. Try a normal browser
+        window if nothing shows up.
       </p>
       <button onClick={onRefresh} type="button">
         <ArrowClockwise size={15} /> Check again
@@ -409,13 +421,15 @@ export function LiveDashboard() {
     return (
       <main className="empty-dashboard">
         <section className="empty-dashboard-card">
-          <img src="/assets/pathminty-app-icon.png" alt="" />
-          <p className="empty-dashboard-kicker">PathMinty analytics</p>
+          <BrandMark size={40} />
+          <p className="empty-dashboard-kicker">PathMinty</p>
           <h1>
-            {status === "loading" ? "Opening your store…" : "Dashboard access needed"}
+            {status === "loading" ? "Opening your dashboard…" : "Open from Shopify"}
           </h1>
           <p>
-            {status === "loading" ? "Verifying the secure Shopify handoff." : error}
+            {status === "loading"
+              ? "Verifying the secure handoff from your store admin."
+              : error || "Reopen PathMinty from Shopify Admin to continue."}
           </p>
         </section>
       </main>
@@ -463,36 +477,7 @@ export function LiveDashboard() {
           type="button"
           aria-label="PathMinty home"
         >
-          <span className="brand-mark-glyph" aria-hidden="true">
-            <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <rect width="40" height="40" rx="8" fill="#0a1f17" />
-              <rect
-                x="0.75"
-                y="0.75"
-                width="38.5"
-                height="38.5"
-                rx="7.25"
-                stroke="#00ba7c"
-                strokeOpacity="0.45"
-              />
-              {/* Path trail */}
-              <path
-                d="M9 27c4.5-1 7-5.5 8.5-10.5C19 11 22 8 27 9"
-                stroke="#00ba7c"
-                strokeWidth="2.4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              {/* Mint leaf tip */}
-              <path
-                d="M27 9c2.2 1.2 3.8 3.4 4 6.1-2.5-.4-4.5-1.8-5.5-3.8.4-1 .9-1.7 1.5-2.3Z"
-                fill="#00ba7c"
-              />
-              {/* Pulse node on path */}
-              <circle cx="17.5" cy="16.5" r="2.2" fill="#1d9bf0" />
-              <circle cx="17.5" cy="16.5" r="3.6" stroke="#1d9bf0" strokeOpacity="0.35" />
-            </svg>
-          </span>
+          <BrandMark size={36} />
         </button>
         <nav className="rail-nav">
           {views.map(({ label, icon: Icon }) => (
@@ -529,9 +514,9 @@ export function LiveDashboard() {
             <span className="demo-chip live-chip">
               <span /> {dataStatus}
             </span>
-            <span className="control store-switcher">
+            <span className="control store-switcher" title={shopId}>
               <Storefront size={16} />
-              {shopId}
+              {shopLabel(shopId)}
             </span>
             <button
               className="icon-button"
@@ -664,43 +649,48 @@ export function LiveDashboard() {
               <section className="insight-strip" aria-label="Route insights">
                 <article>
                   <p>Most active</p>
-                  <strong>{routeIndex.mostActive?.route ?? "—"}</strong>
+                  <strong title={routeIndex.mostActive?.route}>
+                    {routeIndex.mostActive?.route ?? "—"}
+                  </strong>
                   <span>
                     {routeIndex.mostActive
-                      ? `${routeIndex.mostActive.eventCount} events · ${routeIndex.mostActive.sessionCount} sessions`
-                      : "No traffic in range"}
+                      ? `${routeIndex.mostActive.eventCount} ${heatmapMode === "hover" ? "dwell samples" : "clicks"} · ${routeIndex.mostActive.sessionCount} sessions`
+                      : "No traffic in this range"}
                   </span>
                 </article>
                 <article>
                   <p>Least active</p>
-                  <strong>{routeIndex.leastActive?.route ?? "—"}</strong>
+                  <strong title={routeIndex.leastActive?.route}>
+                    {routeIndex.leastActive?.route ?? "—"}
+                  </strong>
                   <span>
                     {routeIndex.leastActive
-                      ? `${routeIndex.leastActive.eventCount} events · ≥3 sessions`
-                      : "Need ≥3 sessions on a quiet route"}
+                      ? `${routeIndex.leastActive.eventCount} events · at least 3 sessions`
+                      : "Needs 3+ sessions on a quieter page"}
                   </span>
                 </article>
                 <article>
-                  <p>Net revenue</p>
+                  <p>Reached checkout</p>
                   <strong>
-                    {routeIndex.orderCount > 0
-                      ? formatMoneyMinor(
-                          routeIndex.totalNetRevenueMinor,
-                          routeIndex.currency,
-                        )
+                    {journey
+                      ? `${journey.checkoutSessions}/${journey.totalSessions}`
                       : "—"}
                   </strong>
                   <span>
-                    {routeIndex.orderCount > 0
-                      ? `${routeIndex.orderCount} verified ${routeIndex.orderCount === 1 ? "order" : "orders"} · multi-touch by route`
-                      : "Orders join after Shopify webhooks (read_orders)"}
+                    {journey
+                      ? `${Math.round(
+                          (journey.checkoutSessions /
+                            Math.max(1, journey.totalSessions)) *
+                            100,
+                        )}% of sessions hit cart or checkout`
+                      : "Builds from multi-page journeys"}
                   </span>
                 </article>
                 <article>
                   <p>In range</p>
                   <strong>
                     {routeIndex.totalSessions} sessions · {routeIndex.totalRoutes}{" "}
-                    routes
+                    pages
                   </strong>
                   <span>
                     {routeIndex.totalEvents} {heatmapMode === "hover" ? "dwell" : "click"}{" "}

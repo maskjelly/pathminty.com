@@ -367,9 +367,9 @@ export function SiteCanvas({
           <span className="site-canvas-eyebrow">Customer journey</span>
           <span className="site-canvas-hint">
             Left → right = path through the store · Blue glow = busiest step · % = share
-            of entry sessions · Green = checkout · $ = verified order revenue on path
-            {journey && journey.orderCount > 0
-              ? ` · ${formatMoneyMinor(journey.totalNetRevenueMinor, journey.currency)} from ${journey.orderCount} order${journey.orderCount === 1 ? "" : "s"}`
+            of entry traffic · Green = reached cart or checkout
+            {journey
+              ? ` · ${journey.checkoutSessions}/${journey.totalSessions} sessions reached checkout`
               : ""}
           </span>
         </div>
