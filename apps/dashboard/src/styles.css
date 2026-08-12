@@ -526,7 +526,7 @@ body {
   color: #fff;
 }
 
-/* —— Site canvas (flow graph) —— */
+/* —— Journey flow canvas (designer mock) —— */
 .site-canvas-section {
   display: flex;
   flex-direction: column;
@@ -541,8 +541,7 @@ body {
   min-height: calc(100vh - 160px);
   margin: 0;
   overflow: hidden;
-  border: 0;
-  background: var(--bg);
+  background: #000;
 }
 .site-canvas-chrome {
   display: flex;
@@ -551,7 +550,7 @@ body {
   gap: 12px;
   padding: 8px 12px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg);
+  background: #000;
 }
 .site-canvas-legend {
   display: grid;
@@ -580,27 +579,13 @@ body {
   font-size: 12px;
   text-align: right;
 }
-.site-canvas-stats {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 16px;
-  padding: 6px 12px;
-  border-bottom: 1px solid var(--border);
-  color: var(--text-secondary);
-  font-size: 12px;
-  background: var(--bg-elevated);
-}
-.site-canvas-stats strong {
-  color: var(--text);
-  font-weight: 700;
-}
 .site-canvas-viewport {
   position: relative;
   flex: 1;
   overflow: hidden;
   cursor: grab;
   touch-action: none;
-  background: var(--bg);
+  background: #000;
 }
 .site-canvas-viewport:active {
   cursor: grabbing;
@@ -611,16 +596,6 @@ body {
   left: 0;
   transform-origin: 0 0;
   will-change: transform;
-}
-.site-canvas-col-label {
-  position: absolute;
-  width: 300px;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  pointer-events: none;
 }
 .site-canvas-edges {
   position: absolute;
@@ -636,163 +611,143 @@ body {
 .site-canvas-edge-hit {
   pointer-events: stroke;
 }
-.site-canvas-edge-label {
-  fill: var(--bg-elevated);
-  stroke: var(--border);
-  stroke-width: 1;
-}
-.site-canvas-edge-label.active {
-  fill: #0a1929;
-  stroke: var(--blue);
-}
-.site-canvas-edge-label-text {
-  fill: var(--text-secondary);
-  font-size: 10px;
-  font-weight: 600;
-  font-family: var(--font);
+.flow-bead {
   pointer-events: none;
 }
-.site-canvas-edge-label-text.active {
-  fill: var(--blue);
+
+/* Highest-traffic callout (designer annotation) */
+.flow-callout {
+  position: absolute;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid rgb(29 155 240 / 55%);
+  border-radius: 999px;
+  color: #e8f5ff;
+  background: rgb(12 40 68 / 92%);
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 0 16px rgb(29 155 240 / 25%);
 }
 
-.site-canvas-card {
+/* Designer-style page cards */
+.flow-card {
   position: absolute;
   display: grid;
-  grid-template-rows: auto auto 1fr auto auto auto;
+  grid-template-rows: 32px 1fr auto;
   overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg);
-  transition: border-color 0.12s ease, opacity 0.12s ease;
+  border: 1px solid #2a2e33;
+  border-radius: 12px;
+  background: #0f1216;
+  box-shadow: 0 8px 28px rgb(0 0 0 / 45%);
+  transition:
+    border-color 0.15s ease,
+    opacity 0.15s ease,
+    box-shadow 0.15s ease;
 }
-.site-canvas-card[data-dimmed="true"] {
-  opacity: 0.28;
+.flow-card[data-dimmed="true"] {
+  opacity: 0.22;
 }
-.site-canvas-card[data-highlight="true"] {
-  border-color: var(--blue);
+.flow-card[data-highlight="true"] {
+  border-color: rgb(29 155 240 / 55%);
+  box-shadow:
+    0 0 0 1px rgb(29 155 240 / 25%),
+    0 10px 32px rgb(0 0 0 / 5%);
   opacity: 1;
 }
-.site-canvas-card:hover {
-  border-color: var(--text-muted);
-  background: var(--bg-elevated);
+.flow-card:hover {
+  border-color: #3d444c;
 }
-.site-canvas-card-bar {
+.flow-card-chrome {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
-  height: 30px;
-  padding: 0 8px;
-  border-bottom: 1px solid var(--border);
+  gap: 8px;
+  height: 32px;
+  padding: 0 8px 0 10px;
+  border-bottom: 1px solid #1e2329;
+  background: linear-gradient(180deg, #161a1f 0%, #12161a 100%);
 }
-.site-canvas-kind {
-  padding: 2px 6px;
-  border: 1px solid var(--border);
-  border-radius: 2px;
-  color: var(--text-secondary);
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
+.flow-card-url {
+  overflow: hidden;
+  color: #8b98a5;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.site-canvas-kind[data-kind="home"] {
-  color: var(--text);
-  border-color: var(--text-muted);
-}
-.site-canvas-kind[data-kind="checkout"],
-.site-canvas-kind[data-kind="cart"] {
-  color: var(--green);
-  border-color: rgb(0 186 124 / 40%);
-}
-.site-canvas-kind[data-kind="product"] {
-  color: var(--blue);
-  border-color: rgb(29 155 240 / 35%);
-}
-.site-canvas-card-bar button {
+.flow-card-open {
   flex-shrink: 0;
   height: 22px;
-  padding: 0 8px;
+  padding: 0 10px;
   border: 0;
-  border-radius: var(--radius);
+  border-radius: 999px;
   color: #fff;
-  background: var(--blue);
+  background: #1d9bf0;
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
 }
-.site-canvas-card-bar button:hover {
-  background: var(--blue-hover);
+.flow-card-open:hover {
+  background: #1a8cd8;
 }
-.site-canvas-card-title {
-  padding: 6px 8px 4px;
+.flow-card-preview {
+  position: relative;
+  min-height: 0;
   overflow: hidden;
-  color: var(--text);
-  font-size: 13px;
+  background: #0a0c0e;
+}
+.flow-card-footer {
+  padding: 8px 10px 10px;
+  border-top: 1px solid #1e2329;
+  background: #0c0f12;
+}
+.flow-card-footer-title {
+  overflow: hidden;
+  color: #e7e9ea;
+  font-size: 12px;
   font-weight: 700;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.site-canvas-card-preview {
-  position: relative;
-  height: 120px;
-  margin: 0 8px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: 2px;
-  background: #0f0f0f;
-}
-.site-canvas-card-metrics {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px 8px;
-  padding: 8px;
-}
-.site-canvas-card-metrics div {
-  display: grid;
-  gap: 0;
-  min-width: 0;
-}
-.site-canvas-card-metrics strong {
-  color: var(--text);
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1.15;
-}
-.site-canvas-card-metrics span {
-  color: var(--text-muted);
-  font-size: 10px;
-  line-height: 1.2;
-}
-.site-canvas-card-flow {
+.flow-card-footer-stats {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  padding: 0 8px 6px;
-  color: var(--text-secondary);
+  gap: 6px 10px;
+  margin-top: 3px;
+  color: #71767b;
   font-size: 11px;
 }
-.site-canvas-card-bar-track {
-  height: 3px;
-  margin: 0;
-  background: var(--border);
+.flow-card-entry {
+  color: #e7e9ea;
+  font-weight: 600;
 }
-.site-canvas-card-bar-track i {
-  display: block;
-  height: 100%;
-  background: var(--blue);
+.flow-card-conversion {
+  color: #00ba7c;
+  font-weight: 700;
+}
+.flow-card-conversion.muted {
+  color: #8b98a5;
+  font-weight: 600;
 }
 
 .site-canvas-edge-tip {
   position: absolute;
-  right: 10px;
-  bottom: 10px;
+  right: 12px;
+  bottom: 12px;
   z-index: 5;
-  width: min(340px, calc(100% - 20px));
+  width: min(320px, calc(100% - 24px));
   padding: 12px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-elevated);
+  border-radius: 10px;
+  background: rgb(15 18 22 / 96%);
+  backdrop-filter: blur(8px);
   pointer-events: none;
 }
 .site-canvas-edge-tip-path {
@@ -807,19 +762,24 @@ body {
 .site-canvas-edge-tip-path code,
 .site-canvas-edge-tip code {
   overflow: hidden;
-  max-width: 140px;
-  padding: 1px 4px;
+  max-width: 120px;
+  padding: 2px 5px;
   border: 1px solid var(--border);
-  border-radius: 2px;
+  border-radius: 4px;
   color: var(--text);
-  background: var(--bg);
+  background: #000;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.site-canvas-edge-tip-primary {
+  margin: 0 0 6px !important;
+  color: #1d9bf0 !important;
+  font-weight: 700;
+}
 .site-canvas-edge-tip p {
-  margin: 0 0 6px;
+  margin: 0 0 5px;
   color: var(--text-secondary);
   font-size: 12px;
   line-height: 1.35;
@@ -832,7 +792,7 @@ body {
   font-weight: 700;
 }
 .site-canvas-edge-tip-share {
-  color: var(--text-muted) !important;
+  color: var(--text-muted);
 }
 .site-canvas-empty {
   display: grid;
