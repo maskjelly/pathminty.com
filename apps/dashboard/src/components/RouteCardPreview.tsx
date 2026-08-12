@@ -1,9 +1,13 @@
-import type { HeatmapResponse } from "@pathminty/contracts";
+import type { HeatmapResponse, RrwebEvent } from "@pathminty/contracts";
 import { useEffect, useRef, useState } from "react";
 import { Replayer, type eventWithTime } from "rrweb";
 import "rrweb/dist/style.css";
 
 import { drawExactHeatCompact } from "../exactHeat";
+import {
+  computeHeatmapDisplayLayout,
+  heatmapRrwebWrapperPinStyles,
+} from "../heatmapLayout";
 import { MiniHeatmap } from "./MiniHeatmap";
 
 function toRrwebEvents(
@@ -26,9 +30,25 @@ function toRrwebEvents(
   });
 }
 
+/** Meta (type 4) often has the capture viewport; prefer document size for coords. */
+function metaViewport(events: readonly RrwebEvent[]): {
+  width: number;
+  height: number;
+} | null {
+  for (const event of events) {
+    if (event.type !== 4) continue;
+    const data = event.data as { width?: unknown; height?: unknown };
+    if (typeof data.width === "number" && typeof data.height === "number") {
+      return { width: data.width, height: data.height };
+    }
+  }
+  return null;
+}
+
 /**
- * Landscape laptop-style card preview: scale by page width into a wide frame
- * and crop to the top fold (desktop viewport), not a tall mobile strip.
+ * Card preview: same scale + origin for DOM snapshot and heat.
+ * Heat points are document-normalized (0–1); canvas is full scaled page size.
+ * The frame clips both layers equally (top-left laptop fold).
  */
 export function RouteCardPreview({
   heatmap,
@@ -62,37 +82,24 @@ export function RouteCardPreview({
     let replayer: Replayer | null = null;
 
     try {
-      const frameW = Math.max(1, frame.clientWidth || 320);
-      const frameH = Math.max(1, frame.clientHeight || 180);
+      const frameW = Math.max(1, frame.clientWidth || 360);
+      const frameH = Math.max(1, frame.clientHeight || 200);
 
-      // Prefer desktop page width; fall back to a laptop-like width.
-      const pageW = Math.max(
-        1_024,
-        heatmap.document?.width || heatmap.viewport?.width || 1_280,
-      );
-      const pageH = Math.max(
-        1,
-        heatmap.document?.height || heatmap.viewport?.height || 900,
-      );
-      // Visible "laptop fold" height for framing (not full long document).
-      const foldH = Math.max(
-        600,
-        Math.min(
-          pageH,
-          heatmap.viewport?.height && heatmap.viewport.width >= 1_024
-            ? heatmap.viewport.height
-            : Math.round(pageW * (9 / 16)),
-        ),
-      );
+      const meta = metaViewport(heatmap.snapshotEvents);
+      // Document space is what click x/y are normalized against — never invent size.
+      const documentSize =
+        heatmap.document ??
+        (meta
+          ? { width: meta.width, height: Math.max(meta.height, heatmap.viewport?.height ?? 0) }
+          : heatmap.viewport
+            ? { width: heatmap.viewport.width, height: heatmap.viewport.height }
+            : null);
 
-      // Fit width to frame (landscape laptop). Crop vertically to top fold.
-      const scale = frameW / pageW;
-      const scaledW = frameW;
-      const scaledFullH = Math.round(pageH * scale);
-      const scaledFoldH = Math.round(foldH * scale);
-      // Center horizontally (flush), top-align for laptop top-of-page view.
-      const offsetX = 0;
-      const offsetY = 0;
+      const layout = computeHeatmapDisplayLayout(
+        documentSize,
+        heatmap.viewport ?? meta,
+        frameW,
+      );
 
       replayer = new Replayer(toRrwebEvents(heatmap.snapshotEvents), {
         root: host,
@@ -110,57 +117,66 @@ export function RouteCardPreview({
       });
       replayer.pause(0);
 
+      // Host is the full scaled page (may be taller than the frame).
+      // Frame overflow:hidden clips both DOM + heat identically at top-left.
       host.style.position = "absolute";
       host.style.left = "0";
       host.style.top = "0";
-      host.style.width = `${frameW}px`;
-      host.style.height = `${frameH}px`;
-      host.style.overflow = "hidden";
+      host.style.right = "auto";
+      host.style.bottom = "auto";
       host.style.margin = "0";
+      host.style.width = `${layout.displayWidth}px`;
+      host.style.height = `${layout.displayHeight}px`;
+      host.style.overflow = "hidden";
 
       const wrapper = host.querySelector(".replayer-wrapper");
       if (wrapper instanceof HTMLElement) {
-        Object.assign(wrapper.style, {
-          position: "absolute",
-          left: `${offsetX}px`,
-          top: `${offsetY}px`,
-          right: "auto",
-          bottom: "auto",
-          float: "none",
-          margin: "0",
-          transform: `scale(${scale})`,
-          transformOrigin: "0 0",
-          width: `${pageW}px`,
-          height: `${pageH}px`,
-        });
+        Object.assign(
+          wrapper.style,
+          heatmapRrwebWrapperPinStyles(
+            layout.pageWidth,
+            layout.pageHeight,
+            layout.scale,
+          ),
+        );
       }
       const iframe = host.querySelector("iframe");
       if (iframe instanceof HTMLIFrameElement) {
         Object.assign(iframe.style, {
           position: "absolute",
-          left: "0",
-          top: "0",
-          margin: "0",
+          left: "0px",
+          top: "0px",
+          margin: "0px",
           border: "0",
-          width: `${pageW}px`,
-          height: `${pageH}px`,
+          display: "block",
+          width: `${layout.pageWidth}px`,
+          height: `${layout.pageHeight}px`,
         });
       }
 
       if (heat) {
-        // Heat uses full page coords; size canvas to full scaled page then clip
-        // with the frame so points stay aligned with the DOM.
-        const heatH = Math.max(scaledFoldH, Math.min(scaledFullH, Math.round(frameH)));
-        drawExactHeatCompact(heat, heatmap.points, scaledW, heatH);
+        // SAME pixel size as the scaled page — points use full document 0–1.
+        drawExactHeatCompact(
+          heat,
+          heatmap.points,
+          layout.displayWidth,
+          layout.displayHeight,
+        );
         Object.assign(heat.style, {
           position: "absolute",
-          left: `${offsetX}px`,
-          top: `${offsetY}px`,
-          width: `${scaledW}px`,
-          height: `${heatH}px`,
+          left: "0px",
+          top: "0px",
+          width: `${layout.displayWidth}px`,
+          height: `${layout.displayHeight}px`,
+          margin: "0",
           pointerEvents: "none",
+          zIndex: "2",
         });
       }
+
+      // Keep frame clipping tight to the landscape window.
+      frame.style.overflow = "hidden";
+      void frameH; // frame height clips vertically via CSS
     } catch {
       setFailed(true);
     }
@@ -185,8 +201,11 @@ export function RouteCardPreview({
 
   return (
     <div className="route-card-live-preview" ref={frameRef}>
-      <div className="route-card-rrweb" ref={hostRef} />
-      <canvas className="route-card-heat" ref={heatRef} aria-hidden />
+      {/* Shared layer: DOM + heat share origin and scale; frame crops the fold. */}
+      <div className="route-card-stack">
+        <div className="route-card-rrweb" ref={hostRef} />
+        <canvas className="route-card-heat" ref={heatRef} aria-hidden />
+      </div>
     </div>
   );
 }

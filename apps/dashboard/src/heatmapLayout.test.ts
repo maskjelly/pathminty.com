@@ -39,6 +39,21 @@ describe("computeHeatmapDisplayLayout", () => {
   });
 });
 
+describe("computeHeatmapDisplayLayout preserves aspect for heat alignment", () => {
+  it("scales document width to available width and keeps ratio", () => {
+    const layout = computeHeatmapDisplayLayout(
+      { width: 1_280, height: 2_400 },
+      { width: 1_280, height: 720 },
+      320,
+    );
+    expect(layout.pageWidth).toBe(1_280);
+    expect(layout.pageHeight).toBe(2_400);
+    expect(layout.scale).toBeCloseTo(0.25, 5);
+    expect(layout.displayWidth).toBe(320);
+    expect(layout.displayHeight).toBe(600);
+  });
+});
+
 describe("heatmap rrweb wrapper pin (rrweb-player CSS isolation)", () => {
   it("pins wrapper to top:0 left:0 without centering leftovers", () => {
     const pin = heatmapRrwebWrapperPinStyles(1_280, 3_546, 0.904_687);

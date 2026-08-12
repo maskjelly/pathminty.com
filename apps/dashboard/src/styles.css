@@ -712,9 +712,15 @@ body {
   overflow: hidden;
   background: #111;
 }
-.route-card-rrweb {
+/* Stack keeps DOM + heat on the same origin; parent clips to landscape fold. */
+.route-card-stack {
   position: absolute;
-  inset: 0;
+  left: 0;
+  top: 0;
+  overflow: visible;
+}
+.route-card-rrweb {
+  position: relative;
   overflow: hidden;
   pointer-events: none;
 }
@@ -723,7 +729,11 @@ body {
 }
 .route-card-heat {
   position: absolute;
+  left: 0;
+  top: 0;
   pointer-events: none;
+  z-index: 2;
+  mix-blend-mode: multiply;
 }
 
 /* —— Heatmap drill-in —— */
