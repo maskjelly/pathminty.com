@@ -1,7 +1,11 @@
 /** Compact PathMinty mark used in the rail and auth screen. */
 export function BrandMark({ size = 36 }: { size?: number }) {
   return (
-    <span className="brand-mark-glyph" aria-hidden="true" style={{ width: size, height: size }}>
+    <span
+      className="brand-mark-glyph"
+      aria-hidden="true"
+      style={{ width: size, height: size }}
+    >
       <svg
         viewBox="0 0 40 40"
         width={size}

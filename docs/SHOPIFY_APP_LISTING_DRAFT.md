@@ -35,7 +35,8 @@ Use PathMinty to:
 
 ## Required before publishing
 
-- Pricing: choose **free beta** or configure Shopify Billing.
+- Pricing: **Free** (1,000 human sessions), **Launch $19** (10,000), **Growth $49**
+  (50,000). Confirm charges through Shopify Billing. Bots do not consume quota.
 - Support email: `[required]`
 - Privacy policy URL: `[required]`
 - Terms URL: `[required]`

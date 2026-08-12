@@ -8,6 +8,13 @@
       "when": 1786443725759,
       "tag": "0000_cuddly_mephisto",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786640000000,
+      "tag": "0001_founder_platform",
+      "breakpoints": true
     }
   ]
 }

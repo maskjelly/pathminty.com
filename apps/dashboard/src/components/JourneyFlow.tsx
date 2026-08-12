@@ -1,4 +1,8 @@
-import type { JourneyEdge, JourneyGraphResponse, JourneyNode } from "@pathminty/contracts";
+import type {
+  JourneyEdge,
+  JourneyGraphResponse,
+  JourneyNode,
+} from "@pathminty/contracts";
 import { useMemo, useState } from "react";
 
 function shortRoute(route: string) {
@@ -63,17 +67,12 @@ export function JourneyFlow({
   onSelectRoute: (route: string) => void;
 }) {
   const [hover, setHover] = useState<
-    | { kind: "node"; node: JourneyNode }
-    | { kind: "edge"; edge: JourneyEdge }
-    | null
+    { kind: "node"; node: JourneyNode } | { kind: "edge"; edge: JourneyEdge } | null
   >(null);
 
   const width = 960;
   const height = 420;
-  const laidOut = useMemo(
-    () => layoutNodes(graph.nodes, width, height),
-    [graph.nodes],
-  );
+  const laidOut = useMemo(() => layoutNodes(graph.nodes, width, height), [graph.nodes]);
   const byRoute = useMemo(() => {
     const map = new Map<string, LayoutNode>();
     for (const node of laidOut) map.set(node.route, node);

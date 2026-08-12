@@ -3,18 +3,26 @@ import {
   HeatmapBatchResponseSchema,
   HeatmapResponseSchema,
   JourneyGraphResponseSchema,
+  OpsFleetResponseSchema,
   ReplaySessionResponseSchema,
   RouteListResponseSchema,
   SessionListResponseSchema,
   ShopIdSchema,
+  ShopWorkspaceSchema,
+  StaffUserSchema,
   type ActivityTimelineResponse,
   type HeatmapMode,
   type HeatmapResponse,
   type JourneyGraphResponse,
+  type OpsFleetResponse,
+  type PlanId,
   type ReplaySessionResponse,
   type RouteListResponse,
   type RouteSort,
+  type SessionQuality,
   type SessionSummary,
+  type ShopWorkspace,
+  type StaffUser,
   type TimeRangePreset,
 } from "@pathminty/contracts";
 
@@ -39,6 +47,13 @@ async function apiRequest(path: string, init?: RequestInit) {
       ...init?.headers,
     },
   });
+}
+
+function readNamedField(body: unknown, name: string): unknown {
+  if (typeof body === "object" && body !== null && name in body) {
+    return (body as Record<string, unknown>)[name];
+  }
+  return undefined;
 }
 
 function parseShopIdResponse(body: unknown) {
@@ -109,11 +124,21 @@ export async function getSessions(
     time: TimeQuery;
     device?: DashboardDevice;
     limit?: number;
+    hideBots?: boolean;
+    minDuration?: number;
+    minClicks?: number;
+    query?: string;
+    quality?: SessionQuality;
   },
 ): Promise<SessionSummary[]> {
   const query = timeSearchParams(options.time);
   query.set("limit", String(options.limit ?? 100));
   if (options.device) query.set("device", options.device);
+  if (options.hideBots === false) query.set("hideBots", "0");
+  if (options.minDuration) query.set("minDuration", String(options.minDuration));
+  if (options.minClicks) query.set("minClicks", String(options.minClicks));
+  if (options.query) query.set("q", options.query);
+  if (options.quality) query.set("quality", options.quality);
   const response = await apiRequest(
     `/v1/shops/${encodeURIComponent(shopId)}/sessions?${query.toString()}`,
   );
@@ -247,3 +272,96 @@ export async function getJourneys(
   if (!response.ok) throw new Error("Unable to load journeys.");
   return JourneyGraphResponseSchema.parse(await response.json());
 }
+
+export async function getWorkspace(shopId: string): Promise<ShopWorkspace> {
+  const response = await apiRequest(
+    `/v1/shops/${encodeURIComponent(shopId)}/workspace`,
+  );
+  if (!response.ok) throw new Error("Unable to load your plan and capture health.");
+  return ShopWorkspaceSchema.parse(await response.json());
+}
+
+export async function selectPlan(
+  shopId: string,
+  planId: PlanId,
+): Promise<ShopWorkspace> {
+  const response = await apiRequest(`/v1/shops/${encodeURIComponent(shopId)}/billing`, {
+    method: "POST",
+    body: JSON.stringify({ planId }),
+  });
+  if (response.status === 402) {
+    throw new Error("Confirm this plan from PathMinty inside Shopify Admin.");
+  }
+  if (!response.ok) throw new Error("Unable to update the plan.");
+  return ShopWorkspaceSchema.parse(await response.json());
+}
+
+export async function opsLogin(email: string, password: string): Promise<StaffUser> {
+  const response = await apiRequest("/v1/ops/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+  if (!response.ok) throw new Error("Staff sign-in failed.");
+  const staff = StaffUserSchema.safeParse(
+    readNamedField(await response.json(), "staff"),
+  );
+  if (!staff.success) throw new Error("Staff sign-in failed.");
+  return staff.data;
+}
+
+export async function getOpsSession(): Promise<StaffUser | null> {
+  const response = await apiRequest("/v1/ops/session");
+  if (response.status === 401) return null;
+  if (!response.ok) throw new Error("Unable to verify staff session.");
+  const staff = StaffUserSchema.safeParse(
+    readNamedField(await response.json(), "staff"),
+  );
+  return staff.success ? staff.data : null;
+}
+
+export async function getOpsFleet(): Promise<OpsFleetResponse> {
+  const response = await apiRequest("/v1/ops/fleet");
+  if (!response.ok) throw new Error("Unable to load the fleet.");
+  return OpsFleetResponseSchema.parse(await response.json());
+}
+
+export async function ackOpsEvent(id: string): Promise<void> {
+  const response = await apiRequest(`/v1/ops/events/${encodeURIComponent(id)}/ack`, {
+    method: "POST",
+  });
+  if (!response.ok) throw new Error("Unable to acknowledge this event.");
+}
+
+export async function createOpsStaff(input: {
+  email: string;
+  name: string;
+  role: "viewer" | "oncall";
+  password: string;
+}): Promise<StaffUser> {
+  const response = await apiRequest("/v1/ops/staff", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+  if (!response.ok) throw new Error("Unable to create staff.");
+  const body: unknown = await response.json();
+  return StaffUserSchema.parse(readNamedField(body, "staff") ?? body);
+}
+
+export async function listOpsStaff(): Promise<StaffUser[]> {
+  const response = await apiRequest("/v1/ops/staff");
+  if (!response.ok) throw new Error("Unable to list staff.");
+  const staff = readNamedField(await response.json(), "staff");
+  if (!Array.isArray(staff)) return [];
+  return staff.map((item) => StaffUserSchema.parse(item));
+}
+
+export async function opsOverridePlan(shopId: string, planId: PlanId): Promise<void> {
+  const response = await apiRequest(
+    `/v1/ops/shops/${encodeURIComponent(shopId)}/plan`,
+    { method: "POST", body: JSON.stringify({ planId }) },
+  );
+  if (!response.ok) throw new Error("Unable to override the plan.");
+}
+
+export const SHOPIFY_INSTALL_URL =
+  "https://admin.shopify.com/oauth/install?client_id=62b97c0201c60add657038e08ce9ba95";

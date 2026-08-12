@@ -1,19 +1,21 @@
 # Dashboard V1 plan (site map · time · quieter live)
 
 **Baseline snapshot:** git tag `v0.1.0-pre-insights` on `main`  
-**Restore:** `git checkout v0.1.0-pre-insights` (or `git switch -c restore/v0.1.0 v0.1.0-pre-insights`)
+**Restore:** `git checkout v0.1.0-pre-insights` (or
+`git switch -c restore/v0.1.0 v0.1.0-pre-insights`)
 
-This checklist is the agreed V1 after the live demo store work. Check items off as they land.
+This checklist is the agreed V1 after the live demo store work. Check items off as they
+land.
 
 ---
 
 ## Product decisions (locked)
 
-| Topic | Decision |
-| ----- | -------- |
-| Multi-page view | **Site map grid** first (ranked route cards + mini heatmaps → drill-in) |
-| Time | **Presets** (`1h` / `24h` / `7d` / `30d`) **+ 24h timeline scrubber** |
-| Auto-refresh | **Live poll only on Recordings** (Heatmaps: manual / filter-driven only) |
+| Topic           | Decision                                                                 |
+| --------------- | ------------------------------------------------------------------------ |
+| Multi-page view | **Site map grid** first (ranked route cards + mini heatmaps → drill-in)  |
+| Time            | **Presets** (`1h` / `24h` / `7d` / `30d`) **+ 24h timeline scrubber**    |
+| Auto-refresh    | **Live poll only on Recordings** (Heatmaps: manual / filter-driven only) |
 
 ---
 
@@ -40,7 +42,8 @@ This checklist is the agreed V1 after the live demo store work. Check items off 
 ## Phase 2 — Time filter
 
 - [x] Global time presets: `1h` · `24h` (default) · `7d` · `30d`
-- [x] Filter sessions / heatmap points by range (`startedAt` / `lastSeenAt` / event `at`)
+- [x] Filter sessions / heatmap points by range (`startedAt` / `lastSeenAt` / event
+      `at`)
 - [x] API: `from` / `to` (or preset) on sessions + heatmaps
 - [x] Insights and ranks always use the selected range
 
@@ -86,17 +89,17 @@ This checklist is the agreed V1 after the live demo store work. Check items off 
 
 ## Defaults (unless product revises)
 
-- **Least active** floor: ≥ **3** sessions in range  
-- **Default sort:** most active  
+- **Least active** floor: ≥ **3** sessions in range
+- **Default sort:** most active
 - **Product URLs:** keep raw paths in v1 (grouping `/products/*` is a later option)
 
 ---
 
 ## Success criteria
 
-- Heatmaps tab stays quiet unless filters change or user refreshes  
-- Catalogs with hundreds of SKU paths stay usable via ranked grid + search  
-- Most / least active routes are obvious in the selected time range  
-- 24h view includes bottom activity strip + scrub  
-- Drill-in full heatmap still works for deep inspection  
-- `v0.1.0-pre-insights` remains a clean rollback point  
+- Heatmaps tab stays quiet unless filters change or user refreshes
+- Catalogs with hundreds of SKU paths stay usable via ranked grid + search
+- Most / least active routes are obvious in the selected time range
+- 24h view includes bottom activity strip + scrub
+- Drill-in full heatmap still works for deep inspection
+- `v0.1.0-pre-insights` remains a clean rollback point

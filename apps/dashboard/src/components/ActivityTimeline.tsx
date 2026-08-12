@@ -60,7 +60,9 @@ export function ActivityTimeline({
       {showLabels && buckets.length > 0 && (
         <div className="activity-labels">
           <span>{hourLabel(buckets[0]?.startAt ?? "")}</span>
-          <span>{hourLabel(buckets[Math.floor(buckets.length / 2)]?.startAt ?? "")}</span>
+          <span>
+            {hourLabel(buckets[Math.floor(buckets.length / 2)]?.startAt ?? "")}
+          </span>
           <span>{hourLabel(buckets.at(-1)?.startAt ?? "")}</span>
         </div>
       )}

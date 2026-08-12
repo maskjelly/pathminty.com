@@ -121,6 +121,7 @@ function captureDocumentSize(): { width: number; height: number } {
 
   let started = false;
   let stopCurrent = () => undefined;
+  let quotaPaused = false;
 
   function start() {
     // Defense in depth: loader gates load; runtime re-checks before capture.
@@ -143,7 +144,10 @@ function captureDocumentSize(): { width: number; height: number } {
     const identity = getOrCreateSessionIdentity(storage, () => crypto.randomUUID());
     const privacy = createRrwebPrivacyOptions();
 
-    const postEnvelope = async (envelope: PendingUploadEnvelope, useKeepalive: boolean) => {
+    const postEnvelope = async (
+      envelope: PendingUploadEnvelope,
+      useKeepalive: boolean,
+    ) => {
       const body = JSON.stringify(envelope);
       const bodyBytes = measureUtf8Bytes(body);
       if (!isWithinHardBatchLimit(bodyBytes, DEFAULT_RECORDER_POLICY.hardBatchBytes)) {
@@ -166,6 +170,10 @@ function captureDocumentSize(): { width: number; height: number } {
         body,
         keepalive,
       });
+      if (response.status === 402) {
+        setStatus("quota");
+        throw new Error("quota_exceeded");
+      }
       if (!response.ok) throw new Error("Collector rejected the batch");
     };
 
@@ -247,6 +255,12 @@ function captureDocumentSize(): { width: number; height: number } {
             clearPendingUpload();
             setStatus("uploaded");
           } catch (error) {
+            if (error instanceof Error && error.message === "quota_exceeded") {
+              quotaPaused = true;
+              clearPendingUpload();
+              stopCurrent();
+              return;
+            }
             if (!(error instanceof BatchTooLargeError)) {
               stashPendingUpload(envelope);
             }
@@ -263,6 +277,7 @@ function captureDocumentSize(): { width: number; height: number } {
 
     const stopRecording = record({
       emit(event) {
+        if (quotaPaused) return;
         uploader.push(event);
         // Flush FullSnapshot immediately so a real session appears without the 5s wait.
         if (shouldFlushImmediatelyAfterEvent(event)) {

@@ -18,6 +18,7 @@
   "dependencies": {
     "@pathminty/cloudflare": "workspace:*",
     "@pathminty/contracts": "workspace:*",
+    "@pathminty/db": "workspace:*",
     "@pathminty/observability": "workspace:*",
     "@pathminty/security": "workspace:*",
     "hono": "^4.10.4"

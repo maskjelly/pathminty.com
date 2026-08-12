@@ -84,6 +84,9 @@ importers:
       '@pathminty/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@pathminty/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@react-router/dev':
         specifier: ^7.12.0
         version: 7.18.2(@types/node@22.20.1)(jiti@2.7.0)(react-router@7.18.2(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(tsx@4.23.12)(typescript@5.9.3)(vite@6.4.3(@types/node@22.20.1)(jiti@2.7.0)(tsx@4.23.12)(yaml@2.9.0))(wrangler@4.120.1(@cloudflare/workers-types@5.20260811.1))(yaml@2.9.0)
@@ -187,9 +190,15 @@ importers:
 
   packages/db:
     dependencies:
+      '@neondatabase/serverless':
+        specifier: ^1.0.1
+        version: 1.1.0
+      '@pathminty/contracts':
+        specifier: workspace:*
+        version: link:../contracts
       drizzle-orm:
         specifier: ^0.44.6
-        version: 0.44.7(@cloudflare/workers-types@5.20260811.1)(@types/pg@8.21.0)(pg@8.23.0)
+        version: 0.44.7(@cloudflare/workers-types@5.20260811.1)(@neondatabase/serverless@1.1.0)(@types/pg@8.21.0)(pg@8.23.0)
       pg:
         specifier: ^8.23.0
         version: 8.23.0
@@ -259,6 +268,9 @@ importers:
       '@pathminty/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@pathminty/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@pathminty/observability':
         specifier: workspace:*
         version: link:../../packages/observability
@@ -278,6 +290,9 @@ importers:
       '@pathminty/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@pathminty/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@pathminty/observability':
         specifier: workspace:*
         version: link:../../packages/observability
@@ -306,6 +321,9 @@ importers:
       '@pathminty/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@pathminty/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       hono:
         specifier: ^4.10.4
         version: 4.13.1
@@ -1792,6 +1810,10 @@ packages:
     cpu: [x64]
     os: [linux]
     libc: [glibc]
+
+  '@neondatabase/serverless@1.1.0':
+    resolution: {integrity: sha512-r3ZZhRjEcfEdKIZnoB1RusNgvHuaBRqfCzV4Gi+5A9yUX0S4HTws/ASWqt13wL4y4I+0rqsWGdA2w7EQXHi3+Q==}
+    engines: {node: '>=19.0.0'}
 
   '@nodelib/fs.scandir@2.1.5':
     resolution: {integrity: sha512-vq24Bq3ym5HEQm2NKCr3yXDwjc7vTsEThRDnkp2DK9p1uqLR+DHurm/NOTo0KG7HYHU7eppKZj3MyqYuMBf62g==}
@@ -5493,6 +5515,8 @@ snapshots:
   '@napi-rs/lzma-linux-x64-gnu@1.5.1':
     optional: true
 
+  '@neondatabase/serverless@1.1.0': {}
+
   '@nodelib/fs.scandir@2.1.5':
     dependencies:
       '@nodelib/fs.stat': 2.0.5
@@ -6382,9 +6406,10 @@ snapshots:
       esbuild: 0.25.12
       tsx: 4.23.12
 
-  drizzle-orm@0.44.7(@cloudflare/workers-types@5.20260811.1)(@types/pg@8.21.0)(pg@8.23.0):
+  drizzle-orm@0.44.7(@cloudflare/workers-types@5.20260811.1)(@neondatabase/serverless@1.1.0)(@types/pg@8.21.0)(pg@8.23.0):
     optionalDependencies:
       '@cloudflare/workers-types': 5.20260811.1
+      '@neondatabase/serverless': 1.1.0
       '@types/pg': 8.21.0
       pg: 8.23.0
 

@@ -28,11 +28,13 @@ not inherit every binding into named environments.
 
 ## Secret locations
 
-| Runtime                          | Local                | Remote                          |
-| -------------------------------- | -------------------- | ------------------------------- |
-| Cloudflare Workers + Shopify app | ignored `.dev.vars`  | Wrangler secret / Secrets Store |
-| Database migration tooling       | ignored `.env.local` | Neon-managed credentials        |
-| GitHub Actions                   | none                 | protected environment secrets   |
+| Runtime                          | Local                                                           | Remote                             |
+| -------------------------------- | --------------------------------------------------------------- | ---------------------------------- |
+| Cloudflare Workers + Shopify app | ignored `.dev.vars`                                             | Wrangler secret / Secrets Store    |
+| Ops bootstrap staff              | `OPS_BOOTSTRAP_EMAIL` / `OPS_BOOTSTRAP_PASSWORD` in `.dev.vars` | Wrangler secrets                   |
+| Neon from Workers                | `DATABASE_URL` in `.dev.vars`                                   | Wrangler secret / later Hyperdrive |
+| Database migration tooling       | ignored `.env.local`                                            | Neon-managed credentials           |
+| GitHub Actions                   | none                                                            | protected environment secrets      |
 
 Never pass secrets as command arguments, put them in `wrangler.jsonc`, or print them
 during diagnostics.

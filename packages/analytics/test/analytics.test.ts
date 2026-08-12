@@ -10,7 +10,9 @@ import {
   buildJourneyGraph,
   buildRouteIndex,
   calculateNetRevenueMinor,
+  classifySessionQuality,
   computeScrollDepth,
+  countRageClicks,
   findSessionForOrder,
   isCheckoutRoute,
   normalizeClientToDocument,
@@ -692,7 +694,7 @@ describe("time range and route index", () => {
     const base = summarizeReplayBatches([rrwebBatch({ sequence: 0 })], {
       isFinal: true,
     });
-    return { ...base, ...overrides } as SessionSummary;
+    return { ...base, ...overrides };
   }
 
   it("resolveTimePreset spans the expected window", () => {
@@ -828,9 +830,46 @@ describe("journey graph", () => {
     expect(graph.conversionBasis).toBe("reached_checkout");
     const landing = graph.nodes.find((n) => n.route === "/");
     expect(landing?.checkoutRate).toBe(0.5);
-    const edge = graph.edges.find(
-      (e) => e.from === "/" && e.to === "/collections/x",
-    );
+    const edge = graph.edges.find((e) => e.from === "/" && e.to === "/collections/x");
     expect(edge?.sessionCount).toBe(2);
+  });
+});
+
+describe("session quality", () => {
+  it("marks near-empty visits as bots and real dwell as human", () => {
+    expect(
+      classifySessionQuality({
+        durationMs: 800,
+        clickCount: 0,
+        eventCount: 2,
+        pointerMoveCount: 0,
+        hasFullSnapshot: false,
+      }),
+    ).toBe("likely_bot");
+    expect(
+      classifySessionQuality({
+        durationMs: 12_000,
+        clickCount: 4,
+        eventCount: 40,
+        pointerMoveCount: 20,
+        hasFullSnapshot: true,
+      }),
+    ).toBe("human");
+  });
+
+  it("counts clustered clicks as rage", () => {
+    expect(
+      countRageClicks([
+        { at: 1_000, x: 0.2, y: 0.2 },
+        { at: 1_200, x: 0.21, y: 0.2 },
+        { at: 1_400, x: 0.2, y: 0.21 },
+      ]),
+    ).toBeGreaterThan(0);
+    expect(
+      countRageClicks([
+        { at: 1_000, x: 0.1, y: 0.1 },
+        { at: 4_000, x: 0.8, y: 0.8 },
+      ]),
+    ).toBe(0);
   });
 });

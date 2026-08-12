@@ -1,5 +1,4 @@
-export * from "./client";
-export * from "./connection-string";
+/** Worker-safe db surface — no `pg` pool. */
 export * from "./health";
 export * from "./kv-billing";
 export * from "./ops";

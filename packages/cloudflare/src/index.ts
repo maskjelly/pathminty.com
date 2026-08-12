@@ -168,17 +168,24 @@ export class R2ReplayObjectStore implements ReplayObjectStore {
   }
 
   async putOrderFact(order: OrderFact): Promise<void> {
-    await this.bucket.put(orderFactKey(order.shopId, order.shopifyOrderId), JSON.stringify(order), {
-      httpMetadata: { contentType: "application/json" },
-      customMetadata: {
-        shopId: order.shopId,
-        currency: order.currency,
-        ...(order.sessionId ? { sessionId: order.sessionId } : {}),
+    await this.bucket.put(
+      orderFactKey(order.shopId, order.shopifyOrderId),
+      JSON.stringify(order),
+      {
+        httpMetadata: { contentType: "application/json" },
+        customMetadata: {
+          shopId: order.shopId,
+          currency: order.currency,
+          ...(order.sessionId ? { sessionId: order.sessionId } : {}),
+        },
       },
-    });
+    );
   }
 
-  async getOrderFact(shopId: string, shopifyOrderId: string): Promise<OrderFact | null> {
+  async getOrderFact(
+    shopId: string,
+    shopifyOrderId: string,
+  ): Promise<OrderFact | null> {
     const object = await this.bucket.get(orderFactKey(shopId, shopifyOrderId));
     if (!object) return null;
     const parsed = OrderFactSchema.safeParse(await object.json<unknown>());

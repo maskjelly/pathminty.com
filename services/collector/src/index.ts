@@ -8,6 +8,12 @@ import {
   type ErrorResponse,
   type SessionSummaryJob,
 } from "@pathminty/contracts";
+import {
+  isQuotaExceeded,
+  pushPipelineEvent,
+  readUsage,
+  writeShopHealth,
+} from "@pathminty/db/worker";
 import { log } from "@pathminty/observability";
 import { constantTimeEqual } from "@pathminty/security";
 import { Hono } from "hono";
@@ -50,7 +56,7 @@ function parseJson(bytes: Uint8Array): unknown {
 
 function errorResponse(
   requestId: string,
-  status: 400 | 401 | 413 | 415 | 500,
+  status: 400 | 401 | 402 | 413 | 415 | 500,
   code: string,
   message: string,
 ): Response {
@@ -90,6 +96,10 @@ app.post("/v1/replay-batches", async (context) => {
 
     const result = ReplayBatchSchema.safeParse(input);
     if (!result.success) {
+      log("warn", "replay_batch_rejected", {
+        requestId,
+        code: "invalid_batch",
+      });
       return errorResponse(
         requestId,
         400,
@@ -104,7 +114,43 @@ app.post("/v1/replay-batches", async (context) => {
       context.env.SHOPIFY_INSTALLATIONS,
     );
     if (!authorized) {
+      log("warn", "replay_batch_rejected", {
+        requestId,
+        code: "tenant_mismatch",
+        shopId: result.data.shopId,
+      });
       return errorResponse(requestId, 401, "tenant_mismatch", "Site token is invalid");
+    }
+
+    const usage = await readUsage(
+      context.env.SHOPIFY_INSTALLATIONS,
+      result.data.shopId,
+    );
+    if (isQuotaExceeded(usage)) {
+      log("warn", "replay_batch_quota_paused", {
+        requestId,
+        shopId: result.data.shopId,
+        period: usage.period,
+        billableSessions: usage.billableSessions,
+        limit: usage.limit,
+      });
+      context.executionCtx.waitUntil(
+        pushPipelineEvent(context.env.SHOPIFY_INSTALLATIONS, {
+          shopId: result.data.shopId,
+          service: "collector",
+          level: "warn",
+          code: "quota_exceeded",
+          message: `Recording paused — ${usage.billableSessions}/${usage.limit} sessions used this month.`,
+          requestId,
+          at: new Date().toISOString(),
+        }),
+      );
+      return errorResponse(
+        requestId,
+        402,
+        "quota_exceeded",
+        "Monthly session quota reached. Upgrade to keep recording.",
+      );
     }
 
     const objectStore = new R2ReplayObjectStore(context.env.REPLAY_BUCKET);
@@ -139,6 +185,7 @@ app.post("/v1/replay-batches", async (context) => {
     return context.json({ accepted: true as const, batchId: result.data.batchId }, 202);
   } catch (error) {
     if (error instanceof BodyTooLargeError) {
+      log("warn", "replay_batch_rejected", { requestId, code: "body_too_large" });
       return errorResponse(
         requestId,
         413,
@@ -219,6 +266,12 @@ app.post("/v1/shopify-events", async (context) => {
         updatedAt: now,
       });
     }
+
+    context.executionCtx.waitUntil(
+      writeShopHealth(context.env.SHOPIFY_INSTALLATIONS, result.data.shopId, {
+        lastPixelAt: result.data.occurredAt,
+      }),
+    );
 
     log("info", "shopify_event_accepted", {
       requestId,

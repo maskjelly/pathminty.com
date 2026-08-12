@@ -13,6 +13,13 @@
   "vars": {
     "ENVIRONMENT": "development",
   },
+  "kv_namespaces": [
+    {
+      "binding": "SHOPIFY_INSTALLATIONS",
+      "id": "0eda94222fa94be59ed1b01489a49819",
+      "remote": true,
+    },
+  ],
   "r2_buckets": [
     {
       "binding": "REPLAY_BUCKET",
@@ -41,6 +48,12 @@
     "staging": {
       "name": "pathminty-analytics-worker-staging",
       "vars": { "ENVIRONMENT": "staging" },
+      "kv_namespaces": [
+        {
+          "binding": "SHOPIFY_INSTALLATIONS",
+          "id": "03644b9aacfe4aaab651727d5f0e869a",
+        },
+      ],
       "r2_buckets": [
         {
           "binding": "REPLAY_BUCKET",
@@ -69,6 +82,12 @@
     "production": {
       "name": "pathminty-analytics-worker-production",
       "vars": { "ENVIRONMENT": "production" },
+      "kv_namespaces": [
+        {
+          "binding": "SHOPIFY_INSTALLATIONS",
+          "id": "ce4d49353861413ba544371c1348bd6d",
+        },
+      ],
       "r2_buckets": [
         {
           "binding": "REPLAY_BUCKET",

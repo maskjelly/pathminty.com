@@ -4,6 +4,7 @@ import {
   CursorClick,
   DeviceMobile,
   DeviceTablet,
+  GearSix,
   MapTrifold,
   Monitor,
   Play,
@@ -15,10 +16,12 @@ import type {
   HeatmapMode,
   HeatmapResponse,
   JourneyGraphResponse,
+  PlanId,
   ReplaySessionResponse,
   RouteListResponse,
   RouteSort,
   SessionSummary,
+  ShopWorkspace,
   TimeRangePreset,
 } from "@pathminty/contracts";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -33,21 +36,26 @@ import {
   getReplay,
   getRoutes,
   getSessions,
+  getWorkspace,
+  selectPlan,
   type DashboardDevice,
   type TimeQuery,
 } from "./api/sessions";
 import { BrandMark } from "./BrandMark";
+import { Landing } from "./marketing/Landing";
+import { SettingsPage } from "./merchant/SettingsPage";
 import { ActivityTimeline } from "./components/ActivityTimeline";
 import { HeatmapSurface } from "./components/HeatmapSurface";
 import { ReplayViewer } from "./components/ReplayViewer";
 import { SiteCanvas } from "./components/SiteCanvas";
 
-type View = "Heatmaps" | "Recordings";
+type View = "Heatmaps" | "Recordings" | "Settings";
 type HeatmapPane = "map" | "route";
 
 const views: Array<{ label: View; icon: typeof MapTrifold }> = [
   { label: "Heatmaps", icon: MapTrifold },
   { label: "Recordings", icon: Record },
+  { label: "Settings", icon: GearSix },
 ];
 
 const TIME_PRESETS: Array<{ id: TimeRangePreset; label: string }> = [
@@ -89,8 +97,9 @@ function EmptySessions({ onRefresh }: { onRefresh: () => void }) {
       <h2>Waiting for storefront sessions</h2>
       <ol className="live-empty-steps">
         <li>
-          In Shopify Admin, open <strong>Online Store → Themes → Customize → App embeds</strong>{" "}
-          and enable <strong>PathMinty Recorder</strong>, then save.
+          In Shopify Admin, open{" "}
+          <strong>Online Store → Themes → Customize → App embeds</strong> and enable{" "}
+          <strong>PathMinty Recorder</strong>, then save.
         </li>
         <li>
           Visit the storefront and accept analytics cookies if your store requires
@@ -144,6 +153,15 @@ function SessionRows({
           </span>
           <span>{session.device}</span>
           <span>{session.clickCount} clicks</span>
+          <span>
+            {session.quality === "likely_bot"
+              ? "bot"
+              : session.quality === "short"
+                ? "short"
+                : session.rageClickCount
+                  ? `${session.rageClickCount} rage`
+                  : "human"}
+          </span>
           <span>{durationLabel(session.durationMs)}</span>
         </button>
       ))}
@@ -159,9 +177,7 @@ export function LiveDashboard() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [routeIndex, setRouteIndex] = useState<RouteListResponse | null>(null);
   const [activity, setActivity] = useState<ActivityTimelineResponse | null>(null);
-  const [miniHeatmaps, setMiniHeatmaps] = useState<Record<string, HeatmapResponse>>(
-    {},
-  );
+  const [miniHeatmaps, setMiniHeatmaps] = useState<Record<string, HeatmapResponse>>({});
   const [device, setDevice] = useState<DashboardDevice>("all");
   const [heatmapMode, setHeatmapMode] = useState<HeatmapMode>("click");
   const [timePreset, setTimePreset] = useState<TimeRangePreset>("24h");
@@ -177,18 +193,33 @@ export function LiveDashboard() {
   const [replay, setReplay] = useState<ReplaySessionResponse | null>(null);
   const [replayOpen, setReplayOpen] = useState(false);
   const [replayLoading, setReplayLoading] = useState(false);
+  const [workspace, setWorkspace] = useState<ShopWorkspace | null>(null);
+  const [hideBots, setHideBots] = useState(true);
+  const [sessionQuery, setSessionQuery] = useState("");
+  const [planBusy, setPlanBusy] = useState(false);
+  const [hasTicket] = useState(() => {
+    const search = new URLSearchParams(window.location.search);
+    const fragment = new URLSearchParams(window.location.hash.slice(1));
+    return Boolean(search.get("ticket") ?? fragment.get("ticket"));
+  });
 
   const timeQuery = useMemo<TimeQuery>(() => ({ preset: timePreset }), [timePreset]);
   const heatmapPane: HeatmapPane = selectedRoute ? "route" : "map";
 
   const loadSessions = useCallback(
     async (shop: string) => {
-      const result = await getSessions(shop, { time: timeQuery, device, limit: 100 });
+      const result = await getSessions(shop, {
+        time: timeQuery,
+        device,
+        limit: 100,
+        hideBots,
+        query: sessionQuery,
+      });
       setSessions(result);
       setError("");
       return result;
     },
-    [timeQuery, device],
+    [timeQuery, device, hideBots, sessionQuery],
   );
 
   const loadSiteMap = useCallback(
@@ -238,9 +269,7 @@ export function LiveDashboard() {
         }
         setError("");
       } catch (caught) {
-        setError(
-          caught instanceof Error ? caught.message : "Unable to load site map.",
-        );
+        setError(caught instanceof Error ? caught.message : "Unable to load site map.");
       } finally {
         setMapLoading(false);
       }
@@ -298,6 +327,9 @@ export function LiveDashboard() {
         if (cancelled) return;
         setShopId(shop);
         setStatus("ready");
+        void getWorkspace(shop)
+          .then(setWorkspace)
+          .catch(() => undefined);
       } catch (caught) {
         if (cancelled) return;
         setError(
@@ -321,9 +353,7 @@ export function LiveDashboard() {
   useEffect(() => {
     if (!shopId || view !== "Recordings") return;
     void loadSessions(shopId).catch((caught: unknown) => {
-      setError(
-        caught instanceof Error ? caught.message : "Unable to load sessions.",
-      );
+      setError(caught instanceof Error ? caught.message : "Unable to load sessions.");
     });
   }, [shopId, view, loadSessions]);
 
@@ -418,6 +448,9 @@ export function LiveDashboard() {
   };
 
   if (status !== "ready" || !shopId) {
+    if (status !== "loading" && !hasTicket) {
+      return <Landing />;
+    }
     return (
       <main className="empty-dashboard">
         <section className="empty-dashboard-card">
@@ -436,7 +469,23 @@ export function LiveDashboard() {
     );
   }
 
+  const changePlan = (planId: PlanId) => {
+    setPlanBusy(true);
+    void selectPlan(shopId, planId)
+      .then(setWorkspace)
+      .catch((caught: unknown) => {
+        setError(caught instanceof Error ? caught.message : "Unable to change plan.");
+      })
+      .finally(() => setPlanBusy(false));
+  };
+
   const refresh = () => {
+    if (view === "Settings") {
+      void getWorkspace(shopId)
+        .then(setWorkspace)
+        .catch(() => undefined);
+      return;
+    }
     if (view === "Recordings") {
       void loadSessions(shopId).catch((caught: unknown) => {
         setError(
@@ -511,6 +560,29 @@ export function LiveDashboard() {
             </h1>
           </div>
           <div className="topbar-actions">
+            {workspace ? (
+              <button
+                className="quota-chip"
+                onClick={() => setView("Settings")}
+                title="Plan and usage"
+                type="button"
+              >
+                <span className="quota-track" aria-hidden="true">
+                  <span
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        (workspace.usage.billableSessions /
+                          Math.max(1, workspace.usage.limit)) *
+                          100,
+                      )}%`,
+                    }}
+                  />
+                </span>
+                {workspace.usage.billableSessions}/{workspace.usage.limit} ·{" "}
+                {workspace.plan.name}
+              </button>
+            ) : null}
             <span className="demo-chip live-chip">
               <span /> {dataStatus}
             </span>
@@ -534,6 +606,29 @@ export function LiveDashboard() {
             {error}
           </div>
         )}
+
+        {workspace && workspace.health.hint !== "ok" && view !== "Settings" ? (
+          <div className="health-banner" data-hint={workspace.health.hint}>
+            {workspace.health.hint === "awaiting_traffic"
+              ? "Connected. Browse the storefront with analytics consent to see the first session."
+              : workspace.health.hint === "quota_paused"
+                ? "Recording is paused — you hit this month’s human-session cap. Upgrade to keep capturing."
+                : workspace.health.hint === "embed_silent"
+                  ? "Pixel events are arriving but no recordings. Enable PathMinty Recorder in the theme editor and save."
+                  : workspace.health.hint === "recent_errors"
+                    ? "Capture hit errors in the last hour. Check the recorder embed and ad blockers."
+                    : "Tracking is disconnected. Reconnect from Shopify Admin."}
+          </div>
+        ) : null}
+
+        {view === "Settings" && workspace ? (
+          <SettingsPage
+            busy={planBusy}
+            onBack={() => setView("Heatmaps")}
+            onSelectPlan={changePlan}
+            workspace={workspace}
+          />
+        ) : null}
 
         {view === "Heatmaps" && (
           <>
@@ -573,6 +668,13 @@ export function LiveDashboard() {
                   type="button"
                 >
                   Hover
+                </button>
+                <button
+                  data-active={heatmapMode === "scroll"}
+                  onClick={() => setHeatmapMode("scroll")}
+                  type="button"
+                >
+                  Scroll
                 </button>
               </div>
               <div className="device-switch" aria-label="Device">
@@ -670,6 +772,21 @@ export function LiveDashboard() {
                   </span>
                 </article>
                 <article>
+                  <p>Watch this first</p>
+                  <strong>
+                    {sessions.some((session) => (session.rageClickCount ?? 0) > 0)
+                      ? "Rage clicks"
+                      : journey && journey.checkoutSessions === 0
+                        ? "No checkout reach"
+                        : "Quiet leaks"}
+                  </strong>
+                  <span>
+                    {sessions.some((session) => (session.rageClickCount ?? 0) > 0)
+                      ? "Open recordings filtered to frustrated taps"
+                      : "Least-active pages with traffic still waste attention"}
+                  </span>
+                </article>
+                <article>
                   <p>Reached checkout</p>
                   <strong>
                     {journey
@@ -689,12 +806,11 @@ export function LiveDashboard() {
                 <article>
                   <p>In range</p>
                   <strong>
-                    {routeIndex.totalSessions} sessions · {routeIndex.totalRoutes}{" "}
-                    pages
+                    {routeIndex.totalSessions} sessions · {routeIndex.totalRoutes} pages
                   </strong>
                   <span>
-                    {routeIndex.totalEvents} {heatmapMode === "hover" ? "dwell" : "click"}{" "}
-                    events · {timePreset}
+                    {routeIndex.totalEvents}{" "}
+                    {heatmapMode === "hover" ? "dwell" : "click"} events · {timePreset}
                   </span>
                 </article>
               </section>
@@ -761,8 +877,8 @@ export function LiveDashboard() {
                     <h2>Session recordings</h2>
                   </div>
                   <span>
-                    {activeCount} active · {sessions.length} in {timePreset} · live
-                    poll on this tab
+                    {activeCount} active · {sessions.length} in {timePreset} · live poll
+                    on this tab
                   </span>
                 </div>
                 <section className="live-toolbar recordings-toolbar">
@@ -801,6 +917,23 @@ export function LiveDashboard() {
                       <DeviceMobile size={16} />
                     </button>
                   </div>
+                  <label className="route-search">
+                    Route
+                    <input
+                      onChange={(event) => setSessionQuery(event.target.value)}
+                      placeholder="/products…"
+                      type="search"
+                      value={sessionQuery}
+                    />
+                  </label>
+                  <label className="bot-toggle">
+                    <input
+                      checked={hideBots}
+                      onChange={(event) => setHideBots(event.target.checked)}
+                      type="checkbox"
+                    />
+                    Hide bots
+                  </label>
                 </section>
                 <SessionRows sessions={sessions} onOpen={openReplay} />
               </section>

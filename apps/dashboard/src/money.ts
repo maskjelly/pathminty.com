@@ -3,8 +3,7 @@ export function formatMoneyMinor(
   amountMinor: number,
   currency: string | null | undefined,
 ): string {
-  const code =
-    currency && /^[A-Z]{3}$/u.test(currency) ? currency : "USD";
+  const code = currency && /^[A-Z]{3}$/u.test(currency) ? currency : "USD";
   try {
     return new Intl.NumberFormat(undefined, {
       style: "currency",

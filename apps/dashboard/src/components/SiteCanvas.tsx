@@ -374,10 +374,20 @@ export function SiteCanvas({
           </span>
         </div>
         <div className="site-canvas-tools">
-          <button type="button" className="icon-button" onClick={() => zoomBy(1.1)} title="Zoom in">
+          <button
+            type="button"
+            className="icon-button"
+            onClick={() => zoomBy(1.1)}
+            title="Zoom in"
+          >
             <MagnifyingGlassPlus size={16} />
           </button>
-          <button type="button" className="icon-button" onClick={() => zoomBy(0.9)} title="Zoom out">
+          <button
+            type="button"
+            className="icon-button"
+            onClick={() => zoomBy(0.9)}
+            title="Zoom out"
+          >
             <MagnifyingGlassMinus size={16} />
           </button>
           <button type="button" className="control" onClick={fit}>
@@ -445,83 +455,85 @@ export function SiteCanvas({
             </defs>
 
             {/* Draw non-primary first so primary sits on top */}
-            {[...edges].sort((a, b) => Number(a.isPrimary) - Number(b.isPrimary)).map((edge) => {
-              const from = pos.get(edge.from);
-              const to = pos.get(edge.to);
-              if (!from || !to) return null;
+            {[...edges]
+              .sort((a, b) => Number(a.isPrimary) - Number(b.isPrimary))
+              .map((edge) => {
+                const from = pos.get(edge.from);
+                const to = pos.get(edge.to);
+                if (!from || !to) return null;
 
-              // Connect mid-right of source → mid-left of target (never through card body mid).
-              const x1 = from.x + CARD_W;
-              const y1 = from.y + CARD_H * 0.42;
-              const x2 = to.x;
-              const y2 = to.y + CARD_H * 0.42;
-              const d = edgePath(x1, y1, x2, y2);
-              const weight = edge.sessionCount / maxEdge;
-              const active =
-                hoverEdge?.from === edge.from && hoverEdge?.to === edge.to;
-              const dimmed =
-                (hoverEdge && !active) ||
-                (hoverRoute &&
-                  hoverRoute !== edge.from &&
-                  hoverRoute !== edge.to);
-              const isPrimary = edge.isPrimary;
-              const stroke = isPrimary ? 6 : 1.5 + weight * 4;
-              const beads = isPrimary
-                ? [0.22, 0.45, 0.68].map((t) => pointOnCubic(x1, y1, x2, y2, t))
-                : [];
+                // Connect mid-right of source → mid-left of target (never through card body mid).
+                const x1 = from.x + CARD_W;
+                const y1 = from.y + CARD_H * 0.42;
+                const x2 = to.x;
+                const y2 = to.y + CARD_H * 0.42;
+                const d = edgePath(x1, y1, x2, y2);
+                const weight = edge.sessionCount / maxEdge;
+                const active =
+                  hoverEdge?.from === edge.from && hoverEdge?.to === edge.to;
+                const dimmed =
+                  (hoverEdge && !active) ||
+                  (hoverRoute && hoverRoute !== edge.from && hoverRoute !== edge.to);
+                const isPrimary = edge.isPrimary;
+                const stroke = isPrimary ? 6 : 1.5 + weight * 4;
+                const beads = isPrimary
+                  ? [0.22, 0.45, 0.68].map((t) => pointOnCubic(x1, y1, x2, y2, t))
+                  : [];
 
-              return (
-                <g
-                  key={`${edge.from}->${edge.to}`}
-                  className="site-canvas-edge-group"
-                  opacity={dimmed ? 0.1 : 1}
-                  onMouseEnter={() => setHoverEdge(edge)}
-                  onMouseLeave={() => setHoverEdge(null)}
-                >
-                  <path
-                    d={d}
-                    fill="none"
-                    stroke="transparent"
-                    strokeWidth={22}
-                    className="site-canvas-edge-hit"
-                  />
-                  {isPrimary && (
+                return (
+                  <g
+                    key={`${edge.from}->${edge.to}`}
+                    className="site-canvas-edge-group"
+                    opacity={dimmed ? 0.1 : 1}
+                    onMouseEnter={() => setHoverEdge(edge)}
+                    onMouseLeave={() => setHoverEdge(null)}
+                  >
                     <path
                       d={d}
                       fill="none"
-                      stroke="#1d9bf0"
-                      strokeWidth={stroke + 10}
+                      stroke="transparent"
+                      strokeWidth={22}
+                      className="site-canvas-edge-hit"
+                    />
+                    {isPrimary && (
+                      <path
+                        d={d}
+                        fill="none"
+                        stroke="#1d9bf0"
+                        strokeWidth={stroke + 10}
+                        strokeLinecap="round"
+                        opacity={0.22}
+                        filter="url(#glow-primary)"
+                      />
+                    )}
+                    <path
+                      d={d}
+                      fill="none"
+                      stroke={isPrimary || active ? "#1d9bf0" : "#5b636a"}
+                      strokeWidth={active && !isPrimary ? stroke + 1 : stroke}
                       strokeLinecap="round"
-                      opacity={0.22}
-                      filter="url(#glow-primary)"
+                      markerEnd={
+                        isPrimary || active
+                          ? "url(#arrow-primary)"
+                          : "url(#arrow-muted)"
+                      }
+                      filter={isPrimary ? "url(#glow-primary)" : undefined}
                     />
-                  )}
-                  <path
-                    d={d}
-                    fill="none"
-                    stroke={isPrimary || active ? "#1d9bf0" : "#5b636a"}
-                    strokeWidth={active && !isPrimary ? stroke + 1 : stroke}
-                    strokeLinecap="round"
-                    markerEnd={
-                      isPrimary || active ? "url(#arrow-primary)" : "url(#arrow-muted)"
-                    }
-                    filter={isPrimary ? "url(#glow-primary)" : undefined}
-                  />
-                  {beads.map((bead, i) => (
-                    <circle
-                      key={i}
-                      cx={bead.x}
-                      cy={bead.y}
-                      r={4.5}
-                      fill="#1d9bf0"
-                      stroke="#000"
-                      strokeWidth={1.5}
-                      className="flow-bead"
-                    />
-                  ))}
-                </g>
-              );
-            })}
+                    {beads.map((bead, i) => (
+                      <circle
+                        key={i}
+                        cx={bead.x}
+                        cy={bead.y}
+                        r={4.5}
+                        fill="#1d9bf0"
+                        stroke="#000"
+                        strokeWidth={1.5}
+                        className="flow-bead"
+                      />
+                    ))}
+                  </g>
+                );
+              })}
           </svg>
 
           {primaryCallout && primaryEdge && (
@@ -600,7 +612,10 @@ export function SiteCanvas({
                     )}
                     {item.stat.netRevenueMinor > 0 ? (
                       <span className="flow-card-revenue">
-                        {formatMoneyMinor(item.stat.netRevenueMinor, item.stat.currency)}
+                        {formatMoneyMinor(
+                          item.stat.netRevenueMinor,
+                          item.stat.currency,
+                        )}
                         {item.stat.orderCount > 0
                           ? ` · ${item.stat.orderCount} ord.`
                           : ""}
@@ -654,10 +669,7 @@ export function SiteCanvas({
           {hoverEdge.netRevenueMinor > 0 && (
             <p>
               <strong>
-                {formatMoneyMinor(
-                  hoverEdge.netRevenueMinor,
-                  journey?.currency ?? null,
-                )}
+                {formatMoneyMinor(hoverEdge.netRevenueMinor, journey?.currency ?? null)}
               </strong>{" "}
               net on paths through this step
               {hoverEdge.orderCount > 0

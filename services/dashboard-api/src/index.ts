@@ -10,16 +10,33 @@ import {
 } from "@pathminty/analytics";
 import { R2ReplayObjectStore } from "@pathminty/cloudflare";
 import {
+  BillingSelectRequestSchema,
   HeatmapModeSchema,
+  MerchantRoleSchema,
+  PlanIdSchema,
   RouteSortSchema,
+  SessionQualitySchema,
   ShopIdSchema,
   TimeRangePresetSchema,
   type SessionSummary,
-  type TimeRangePreset,
 } from "@pathminty/contracts";
 import { Hono } from "hono";
 import { setCookie } from "hono/cookie";
 import { secureHeaders } from "hono/secure-headers";
+
+import {
+  acknowledgeEvent,
+  bootstrapOps,
+  buildFleet,
+  createStaff,
+  issueStaffCookie,
+  listStaff,
+  loginStaff,
+  staffCanAdmin,
+  staffCanWrite,
+  staffFromCookie,
+} from "./ops";
+import { applyPlanChange, buildWorkspace } from "./workspace";
 
 type Variables = { authorizedShopId: string };
 
@@ -42,9 +59,9 @@ function parseDevice(raw: string | undefined) {
     : null;
 }
 
-function parseTimeWindow(
-  request: { query: (key: string) => string | undefined },
-): { fromMs: number; toMs: number } | { error: string } {
+function parseTimeWindow(request: {
+  query: (key: string) => string | undefined;
+}): { fromMs: number; toMs: number } | { error: string } {
   const toRaw = request.query("to");
   const fromRaw = request.query("from");
   const presetRaw = request.query("preset");
@@ -64,7 +81,7 @@ function parseTimeWindow(
 
   const preset = TimeRangePresetSchema.safeParse(presetRaw ?? "24h");
   if (!preset.success) return { error: "Invalid time preset" };
-  return resolveTimePreset(preset.data as TimeRangePreset, toMs);
+  return resolveTimePreset(preset.data, toMs);
 }
 
 app.use("*", secureHeaders());
@@ -204,9 +221,90 @@ app.get("/v1/meta", (context) =>
     service: "dashboard-api",
     status: "ok" as const,
     environment: context.env.ENVIRONMENT,
-    database: "pending" as const,
+    database:
+      typeof (context.env as { DATABASE_URL?: string }).DATABASE_URL === "string"
+        ? "neon"
+        : "kv",
   }),
 );
+
+app.get("/v1/shops/:shopId/workspace", async (context) => {
+  const shop = ShopIdSchema.safeParse(context.req.param("shopId"));
+  if (!shop.success) return context.json({ error: "Invalid shop" }, 400);
+  if (shop.data !== context.get("authorizedShopId")) {
+    return context.json({ error: "Shop access denied" }, 403);
+  }
+  const workspace = await buildWorkspace(
+    context.env.SHOPIFY_INSTALLATIONS,
+    shop.data,
+    "owner",
+  );
+  return context.json(workspace);
+});
+
+app.post("/v1/shops/:shopId/billing", async (context) => {
+  const shop = ShopIdSchema.safeParse(context.req.param("shopId"));
+  if (!shop.success) return context.json({ error: "Invalid shop" }, 400);
+  if (shop.data !== context.get("authorizedShopId")) {
+    return context.json({ error: "Shop access denied" }, 403);
+  }
+  let body: unknown;
+  try {
+    body = await context.req.json<unknown>();
+  } catch {
+    return context.json({ error: "Invalid request" }, 400);
+  }
+  const parsed = BillingSelectRequestSchema.safeParse(body);
+  if (!parsed.success) return context.json({ error: "Invalid plan" }, 400);
+  if (
+    parsed.data.planId !== "free" &&
+    String(context.env.ENVIRONMENT) === "production"
+  ) {
+    return context.json(
+      { error: "Confirm paid plans from PathMinty → Plan in Shopify Admin." },
+      402,
+    );
+  }
+  await applyPlanChange(
+    context.env.SHOPIFY_INSTALLATIONS,
+    shop.data,
+    parsed.data.planId,
+  );
+  return context.json(
+    await buildWorkspace(context.env.SHOPIFY_INSTALLATIONS, shop.data, "owner"),
+  );
+});
+
+app.post("/v1/shops/:shopId/members", async (context) => {
+  const shop = ShopIdSchema.safeParse(context.req.param("shopId"));
+  if (!shop.success) return context.json({ error: "Invalid shop" }, 400);
+  if (shop.data !== context.get("authorizedShopId")) {
+    return context.json({ error: "Shop access denied" }, 403);
+  }
+  const workspace = await buildWorkspace(
+    context.env.SHOPIFY_INSTALLATIONS,
+    shop.data,
+    "owner",
+  );
+  if (workspace.plan.id !== "growth") {
+    return context.json({ error: "Team roles are on the Growth plan." }, 402);
+  }
+  let body: unknown;
+  try {
+    body = await context.req.json<unknown>();
+  } catch {
+    return context.json({ error: "Invalid request" }, 400);
+  }
+  const record =
+    typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
+  const role = MerchantRoleSchema.safeParse(record.role);
+  if (!role.success) return context.json({ error: "Invalid role" }, 400);
+  return context.json({
+    ok: true,
+    role: role.data,
+    note: "Anyone who opens PathMinty from Shopify Admin inherits this default role.",
+  });
+});
 
 app.get("/v1/shops/:shopId/sessions", async (context) => {
   const shop = ShopIdSchema.safeParse(context.req.param("shopId"));
@@ -218,20 +316,46 @@ app.get("/v1/shops/:shopId/sessions", async (context) => {
   const rawLimit = Number(context.req.query("limit") ?? "50");
   const limit = Number.isInteger(rawLimit) ? Math.min(Math.max(rawLimit, 1), 100) : 50;
   const includeTest = context.req.query("includeTest") === "1";
+  const hideBots = context.req.query("hideBots") !== "0";
+  const minDuration = Number(context.req.query("minDuration") ?? "0");
+  const minClicks = Number(context.req.query("minClicks") ?? "0");
+  const query = (context.req.query("q") ?? "").trim().toLowerCase();
+  const qualityFilter = context.req.query("quality");
+  const quality = qualityFilter ? SessionQualitySchema.safeParse(qualityFilter) : null;
+  if (quality && !quality.success) {
+    return context.json({ error: "Invalid quality" }, 400);
+  }
   const window = parseTimeWindow(context.req);
   if ("error" in window) return context.json({ error: window.error }, 400);
 
   const device = parseDevice(context.req.query("device") ?? undefined);
   if (!device) return context.json({ error: "Invalid device" }, 400);
 
-  const sessions = (await loadShopSessions(context.env.REPLAY_BUCKET, shop.data, {
-    includeTest,
-    limit: 100,
-  })).filter((session) => {
+  const sessions = (
+    await loadShopSessions(context.env.REPLAY_BUCKET, shop.data, {
+      includeTest,
+      limit: 100,
+    })
+  ).filter((session) => {
     if (device !== "all" && session.device !== device) return false;
     const started = Date.parse(session.startedAt);
     const lastSeen = Date.parse(session.lastSeenAt);
-    return lastSeen >= window.fromMs && started <= window.toMs;
+    if (!(lastSeen >= window.fromMs && started <= window.toMs)) return false;
+    const qualityValue = session.quality ?? "human";
+    if (hideBots && qualityValue === "likely_bot") return false;
+    if (quality?.success && qualityValue !== quality.data) return false;
+    if (Number.isFinite(minDuration) && session.durationMs < minDuration) {
+      return false;
+    }
+    if (Number.isFinite(minClicks) && session.clickCount < minClicks) {
+      return false;
+    }
+    if (query) {
+      const haystack =
+        `${session.entryRoute} ${session.exitRoute} ${session.routes.join(" ")}`.toLowerCase();
+      if (!haystack.includes(query)) return false;
+    }
+    return true;
   });
 
   return context.json({
@@ -559,6 +683,144 @@ app.get("/v1/shops/:shopId/journeys", async (context) => {
       maxNodes,
     }),
   );
+});
+
+app.post("/v1/ops/login", async (context) => {
+  const store = context.env.SHOPIFY_INSTALLATIONS;
+  await bootstrapOps(
+    store,
+    context.env as {
+      OPS_BOOTSTRAP_EMAIL?: string;
+      OPS_BOOTSTRAP_PASSWORD?: string;
+    },
+  );
+  let body: unknown;
+  try {
+    body = await context.req.json<unknown>();
+  } catch {
+    return context.json({ error: "Invalid request" }, 400);
+  }
+  const record =
+    typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
+  if (typeof record.email !== "string" || typeof record.password !== "string") {
+    return context.json({ error: "Email and password are required" }, 400);
+  }
+  const staff = await loginStaff(store, record.email, record.password);
+  if (!staff) return context.json({ error: "Invalid staff credentials" }, 401);
+  const sessionId = await issueStaffCookie(store, staff);
+  setCookie(context, "pathminty_ops", sessionId, {
+    httpOnly: true,
+    maxAge: 43_200,
+    path: "/",
+    sameSite: "Lax",
+    secure: new URL(context.req.url).protocol === "https:",
+  });
+  return context.json({ staff });
+});
+
+app.get("/v1/ops/session", async (context) => {
+  const staff = await staffFromCookie(
+    context.env.SHOPIFY_INSTALLATIONS,
+    readCookie(context.req.header("cookie"), "pathminty_ops"),
+  );
+  if (!staff) return context.json({ error: "Authentication required" }, 401);
+  return context.json({ staff });
+});
+
+app.get("/v1/ops/fleet", async (context) => {
+  const staff = await staffFromCookie(
+    context.env.SHOPIFY_INSTALLATIONS,
+    readCookie(context.req.header("cookie"), "pathminty_ops"),
+  );
+  if (!staff) return context.json({ error: "Authentication required" }, 401);
+  return context.json(await buildFleet(context.env.SHOPIFY_INSTALLATIONS));
+});
+
+app.post("/v1/ops/events/:id/ack", async (context) => {
+  const staff = await staffFromCookie(
+    context.env.SHOPIFY_INSTALLATIONS,
+    readCookie(context.req.header("cookie"), "pathminty_ops"),
+  );
+  if (!staff) return context.json({ error: "Authentication required" }, 401);
+  if (!staffCanWrite(staff.role)) {
+    return context.json({ error: "On-call or admin role required" }, 403);
+  }
+  await acknowledgeEvent(context.env.SHOPIFY_INSTALLATIONS, context.req.param("id"));
+  return context.json({ ok: true });
+});
+
+app.get("/v1/ops/staff", async (context) => {
+  const staff = await staffFromCookie(
+    context.env.SHOPIFY_INSTALLATIONS,
+    readCookie(context.req.header("cookie"), "pathminty_ops"),
+  );
+  if (!staff) return context.json({ error: "Authentication required" }, 401);
+  if (!staffCanAdmin(staff.role)) {
+    return context.json({ error: "Admin role required" }, 403);
+  }
+  return context.json({ staff: await listStaff(context.env.SHOPIFY_INSTALLATIONS) });
+});
+
+app.post("/v1/ops/staff", async (context) => {
+  const actor = await staffFromCookie(
+    context.env.SHOPIFY_INSTALLATIONS,
+    readCookie(context.req.header("cookie"), "pathminty_ops"),
+  );
+  if (!actor) return context.json({ error: "Authentication required" }, 401);
+  if (!staffCanAdmin(actor.role)) {
+    return context.json({ error: "Admin role required" }, 403);
+  }
+  let body: unknown;
+  try {
+    body = await context.req.json<unknown>();
+  } catch {
+    return context.json({ error: "Invalid request" }, 400);
+  }
+  const record =
+    typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
+  if (
+    typeof record.email !== "string" ||
+    typeof record.name !== "string" ||
+    typeof record.password !== "string"
+  ) {
+    return context.json({ error: "Email, name, and password are required" }, 400);
+  }
+  const role =
+    record.role === "oncall" || record.role === "viewer" ? record.role : "viewer";
+  const created = await createStaff(context.env.SHOPIFY_INSTALLATIONS, {
+    email: record.email,
+    name: record.name,
+    role,
+    password: record.password,
+  });
+  return context.json({ staff: created });
+});
+
+app.post("/v1/ops/shops/:shopId/plan", async (context) => {
+  const actor = await staffFromCookie(
+    context.env.SHOPIFY_INSTALLATIONS,
+    readCookie(context.req.header("cookie"), "pathminty_ops"),
+  );
+  if (!actor) return context.json({ error: "Authentication required" }, 401);
+  if (!staffCanAdmin(actor.role)) {
+    return context.json({ error: "Admin role required" }, 403);
+  }
+  const shop = ShopIdSchema.safeParse(context.req.param("shopId"));
+  if (!shop.success) return context.json({ error: "Invalid shop" }, 400);
+  let body: unknown;
+  try {
+    body = await context.req.json<unknown>();
+  } catch {
+    return context.json({ error: "Invalid request" }, 400);
+  }
+  const plan = PlanIdSchema.safeParse(
+    typeof body === "object" && body !== null
+      ? (body as Record<string, unknown>).planId
+      : undefined,
+  );
+  if (!plan.success) return context.json({ error: "Invalid plan" }, 400);
+  await applyPlanChange(context.env.SHOPIFY_INSTALLATIONS, shop.data, plan.data);
+  return context.json({ ok: true, planId: plan.data });
 });
 
 app.notFound(() => new Response("Not found", { status: 404 }));

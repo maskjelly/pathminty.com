@@ -11,7 +11,10 @@ import {
 function isDashboardRequest(request: Request) {
   const path = new URL(request.url).pathname;
   return (
-    path === "/v1/meta" || path.startsWith("/v1/auth/") || path.startsWith("/v1/shops/")
+    path === "/v1/meta" ||
+    path.startsWith("/v1/auth/") ||
+    path.startsWith("/v1/shops/") ||
+    path.startsWith("/v1/ops/")
   );
 }
 

@@ -15,7 +15,20 @@ import {
   type SessionSummaryJob,
   type ShopifyWebhookJob,
 } from "@pathminty/contracts";
+import {
+  createWorkerDatabase,
+  databaseUrlFromEnv,
+  recordBillableSession,
+  touchShopActivity,
+  upsertSessionFact,
+  writeShopHealth,
+} from "@pathminty/db/worker";
 import { log } from "@pathminty/observability";
+
+type AnalyticsEnv = Cloudflare.Env & {
+  SHOPIFY_INSTALLATIONS: KVNamespace;
+  DATABASE_URL?: string;
+};
 
 function isShopifyWebhooksQueue(queueName: string) {
   return queueName.includes("shopify-webhooks");
@@ -24,6 +37,7 @@ function isShopifyWebhooksQueue(queueName: string) {
 async function processSessionJob(
   message: Message<SessionSummaryJob>,
   objectStore: R2ReplayObjectStore,
+  env: AnalyticsEnv,
 ) {
   const result = SessionSummaryJobSchema.safeParse(message.body);
 
@@ -80,9 +94,7 @@ async function processSessionJob(
     if (existing?.orderId) {
       summary = {
         ...summary,
-        ...(existing.checkoutTokens
-          ? { checkoutTokens: existing.checkoutTokens }
-          : {}),
+        ...(existing.checkoutTokens ? { checkoutTokens: existing.checkoutTokens } : {}),
         orderId: existing.orderId,
         ...(typeof existing.netRevenueMinor === "number"
           ? { netRevenueMinor: existing.netRevenueMinor }
@@ -93,6 +105,50 @@ async function processSessionJob(
     }
 
     await objectStore.putSessionSummary(summary);
+
+    const quality = summary.quality ?? "human";
+    await recordBillableSession(env.SHOPIFY_INSTALLATIONS, result.data.shopId, {
+      sessionId: result.data.sessionId,
+      quality,
+      replayBytes: totalBytes,
+    });
+    await writeShopHealth(env.SHOPIFY_INSTALLATIONS, result.data.shopId, {
+      lastReplayAt: summary.lastSeenAt,
+    });
+
+    const databaseUrl = databaseUrlFromEnv(env);
+    if (databaseUrl) {
+      const db = createWorkerDatabase(databaseUrl);
+      await upsertSessionFact(db, {
+        shopifyDomain: result.data.shopId,
+        sessionId: result.data.sessionId,
+        visitorId: summary.visitorId,
+        status: summary.status === "active" ? "active" : "completed",
+        quality,
+        device: summary.device,
+        source: summary.source,
+        entryRoute: summary.entryRoute,
+        lastRoute: summary.exitRoute,
+        routes: [...summary.routes],
+        chunkCount: chunks.length,
+        replayBytes: totalBytes,
+        clickCount: summary.clickCount,
+        eventCount: summary.eventCount,
+        durationMs: summary.durationMs,
+        rageClickCount: summary.rageClickCount ?? 0,
+        hasFullSnapshot: summary.hasFullSnapshot,
+        billable: quality === "human",
+        startedAt: new Date(summary.startedAt),
+        lastSeenAt: new Date(summary.lastSeenAt),
+        endedAt: summary.status === "ended" ? new Date(summary.endedAt) : null,
+      });
+      await touchShopActivity(
+        db,
+        result.data.shopId,
+        "lastReplayAt",
+        new Date(summary.lastSeenAt),
+      );
+    }
 
     const reconstruction = assessReplayReconstruction(replayBatches);
 
@@ -330,21 +386,18 @@ async function processShopifyWebhook(
 }
 
 export default {
-  async queue(batch, env) {
+  async queue(batch, env: AnalyticsEnv) {
     const objectStore = new R2ReplayObjectStore(env.REPLAY_BUCKET);
 
     if (isShopifyWebhooksQueue(batch.queue)) {
       for (const message of batch.messages) {
-        await processShopifyWebhook(
-          message as Message<ShopifyWebhookJob>,
-          objectStore,
-        );
+        await processShopifyWebhook(message as Message<ShopifyWebhookJob>, objectStore);
       }
       return;
     }
 
     for (const message of batch.messages) {
-      await processSessionJob(message as Message<SessionSummaryJob>, objectStore);
+      await processSessionJob(message as Message<SessionSummaryJob>, objectStore, env);
     }
   },
-} satisfies ExportedHandler<Cloudflare.Env, SessionSummaryJob | ShopifyWebhookJob>;
+} satisfies ExportedHandler<AnalyticsEnv, SessionSummaryJob | ShopifyWebhookJob>;

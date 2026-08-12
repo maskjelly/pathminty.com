@@ -1,0 +1,5 @@
+# Copy into services/*/.dev.vars as needed. Never commit real values.
+DATABASE_URL=
+OPS_BOOTSTRAP_EMAIL=founder@pathminty.local
+OPS_BOOTSTRAP_PASSWORD=
+STOREFRONT_TOKEN_SECRET=

@@ -90,7 +90,10 @@ export function RouteCardPreview({
       const documentSize =
         heatmap.document ??
         (meta
-          ? { width: meta.width, height: Math.max(meta.height, heatmap.viewport?.height ?? 0) }
+          ? {
+              width: meta.width,
+              height: Math.max(meta.height, heatmap.viewport?.height ?? 0),
+            }
           : heatmap.viewport
             ? { width: heatmap.viewport.width, height: heatmap.viewport.height }
             : null);

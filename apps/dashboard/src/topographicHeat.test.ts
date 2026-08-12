@@ -14,12 +14,7 @@ describe("drawTopographicHeat", () => {
     } as unknown as HTMLCanvasElement;
 
     expect(() =>
-      drawTopographicHeat(
-        canvas,
-        [{ x: 0.5, y: 0.5, weight: 3 }],
-        200,
-        100,
-      ),
+      drawTopographicHeat(canvas, [{ x: 0.5, y: 0.5, weight: 3 }], 200, 100),
     ).not.toThrow();
   });
 });

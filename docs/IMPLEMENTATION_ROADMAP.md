@@ -50,9 +50,12 @@ measured India latency before production; do not move it based on guesswork alon
 - session list and replay;
 - click/tap and scroll heatmaps;
 - route explorer;
-- net-revenue filters;
-- usage/retention controls;
-- recording health and privacy settings.
+- human-session billing (Free / Launch $19 / Growth $49);
+- usage/retention controls that match the subscribed plan;
+- recording health and privacy settings;
+- PathMinty staff ops (viewer / on-call / admin).
+
+Order/refund webhooks and net-revenue join stay paused until PCD approval.
 
 ## Scale triggers—not dates
 

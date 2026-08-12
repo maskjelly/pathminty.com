@@ -450,8 +450,8 @@ export default function Setup() {
 
       <s-section heading="2. Enable the recorder embed">
         <s-paragraph>
-          In the theme editor, turn on the PathMinty Recorder app embed and save. This is
-          required once per theme.
+          In the theme editor, turn on the PathMinty Recorder app embed and save. This
+          is required once per theme.
         </s-paragraph>
         <s-button
           href={loaderData.themeEditorUrl}
@@ -481,11 +481,11 @@ export default function Setup() {
           <s-list-item>
             Form fields and keystrokes are never captured in session recordings.
           </s-list-item>
-          <s-list-item>
-            Obvious contact details in search terms are masked.
-          </s-list-item>
+          <s-list-item>Obvious contact details in search terms are masked.</s-list-item>
           <s-list-item>Storefront URLs drop query strings and fragments.</s-list-item>
-          <s-list-item>Recording waits for analytics consent when required.</s-list-item>
+          <s-list-item>
+            Recording waits for analytics consent when required.
+          </s-list-item>
         </s-unordered-list>
       </s-section>
 

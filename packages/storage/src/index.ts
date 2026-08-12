@@ -39,7 +39,10 @@ export interface ReplayObjectStore {
   getOrderFact(shopId: string, shopifyOrderId: string): Promise<OrderFact | null>;
   listOrderFacts(shopId: string, limit: number): Promise<OrderFact[]>;
   putCheckoutIndex(index: CheckoutIndex): Promise<void>;
-  getCheckoutIndex(shopId: string, checkoutToken: string): Promise<CheckoutIndex | null>;
+  getCheckoutIndex(
+    shopId: string,
+    checkoutToken: string,
+  ): Promise<CheckoutIndex | null>;
 }
 
 export interface SessionJobPublisher {

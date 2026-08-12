@@ -184,6 +184,9 @@ export const HeatmapHoverSchema = z
 
 export type HeatmapHover = z.infer<typeof HeatmapHoverSchema>;
 
+export const SessionQualitySchema = z.enum(["human", "short", "likely_bot"]);
+export type SessionQuality = z.infer<typeof SessionQualitySchema>;
+
 export const SessionSummarySchema = z
   .object({
     schemaVersion: z.literal(REPLAY_CONTRACT_VERSION),
@@ -221,6 +224,11 @@ export const SessionSummarySchema = z
       .regex(/^[A-Z]{3}$/)
       .optional(),
     purchasedAt: z.string().datetime({ offset: true }).optional(),
+    /** Bot / bounce classification. Absent on summaries written before this field. */
+    quality: SessionQualitySchema.optional(),
+    rageClickCount: z.number().int().nonnegative().max(10_000).optional(),
+    /** Document-normalized scroll samples (y = depth). Used for scroll heatmaps. */
+    scrolls: z.array(HeatmapHoverSchema).max(400).optional(),
   })
   .strict();
 
@@ -249,8 +257,119 @@ export const ReplaySessionResponseSchema = z
 
 export type ReplaySessionResponse = z.infer<typeof ReplaySessionResponseSchema>;
 
-export const HeatmapModeSchema = z.enum(["click", "hover"]);
+export const HeatmapModeSchema = z.enum(["click", "hover", "scroll"]);
 export type HeatmapMode = z.infer<typeof HeatmapModeSchema>;
+
+export const PlanIdSchema = z.enum(["free", "launch", "growth"]);
+export type PlanId = z.infer<typeof PlanIdSchema>;
+
+export const MerchantRoleSchema = z.enum(["owner", "analyst", "viewer"]);
+export type MerchantRole = z.infer<typeof MerchantRoleSchema>;
+
+export const StaffRoleSchema = z.enum(["viewer", "oncall", "admin"]);
+export type StaffRole = z.infer<typeof StaffRoleSchema>;
+
+export const PLAN_CATALOG = {
+  free: {
+    id: "free" as const,
+    name: "Free",
+    priceUsd: 0,
+    monthlySessions: 1_000,
+    retentionDays: 14,
+    headline: "See if PathMinty finds the leak",
+    features: [
+      "Click + hover heatmaps",
+      "Session recordings",
+      "Site canvas + journeys",
+      "Capture health",
+      "14-day replay storage",
+    ],
+  },
+  launch: {
+    id: "launch" as const,
+    name: "Launch",
+    priceUsd: 19,
+    monthlySessions: 10_000,
+    retentionDays: 30,
+    headline: "The DTC default",
+    features: [
+      "Everything in Free",
+      "10,000 human sessions / month",
+      "Scroll heatmaps + rage-click flags",
+      "Session filters",
+      "30-day replay storage",
+    ],
+  },
+  growth: {
+    id: "growth" as const,
+    name: "Growth",
+    priceUsd: 49,
+    monthlySessions: 50_000,
+    retentionDays: 60,
+    headline: "For stores that cannot guess",
+    features: [
+      "Everything in Launch",
+      "50,000 human sessions / month",
+      "Team roles (owner / analyst / viewer)",
+      "Priority capture diagnostics",
+      "60-day replay storage",
+    ],
+  },
+} as const;
+
+export type PlanDefinition = (typeof PLAN_CATALOG)[PlanId];
+
+export function planById(planId: string): PlanDefinition {
+  if (planId === "launch" || planId === "growth" || planId === "free") {
+    return PLAN_CATALOG[planId];
+  }
+  return PLAN_CATALOG.free;
+}
+
+export function usagePeriodUtc(now: Date = new Date()): string {
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+export function usageKvKey(shopId: string, period: string): string {
+  return `usage:${shopId}:${period}`;
+}
+
+export function subscriptionKvKey(shopId: string): string {
+  return `subscription:${shopId}`;
+}
+
+export function sessionCountedKvKey(
+  shopId: string,
+  period: string,
+  sessionId: string,
+): string {
+  return `counted:${shopId}:${period}:${sessionId}`;
+}
+
+export const UsageSnapshotSchema = z
+  .object({
+    planId: PlanIdSchema,
+    period: z.string().regex(/^\d{4}-\d{2}$/),
+    billableSessions: z.number().int().nonnegative(),
+    rawSessions: z.number().int().nonnegative(),
+    botSessions: z.number().int().nonnegative(),
+    limit: z.number().int().nonnegative(),
+    updatedAt: z.string().min(20).max(40),
+  })
+  .strict();
+
+export type UsageSnapshot = z.infer<typeof UsageSnapshotSchema>;
+
+export const ShopSubscriptionSchema = z
+  .object({
+    planId: PlanIdSchema,
+    status: z.enum(["active", "cancelled", "pending", "frozen"]),
+    shopifySubscriptionId: z.string().min(1).max(255).optional(),
+    updatedAt: z.string().min(20).max(40),
+  })
+  .strict();
+
+export type ShopSubscription = z.infer<typeof ShopSubscriptionSchema>;
 
 export const HeatmapPointSchema = z
   .object({
@@ -576,3 +695,121 @@ export const ErrorResponseSchema = z
   .strict();
 
 export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
+
+export const CaptureHealthSchema = z
+  .object({
+    connected: z.boolean(),
+    lastReplayAt: z.string().datetime({ offset: true }).nullable(),
+    lastPixelAt: z.string().datetime({ offset: true }).nullable(),
+    lastErrorCode: z.string().max(64).nullable(),
+    lastErrorAt: z.string().datetime({ offset: true }).nullable(),
+    quotaPaused: z.boolean(),
+    hint: z.enum([
+      "ok",
+      "awaiting_traffic",
+      "embed_silent",
+      "quota_paused",
+      "recent_errors",
+      "disconnected",
+    ]),
+  })
+  .strict();
+
+export type CaptureHealth = z.infer<typeof CaptureHealthSchema>;
+
+export const ShopWorkspaceSchema = z
+  .object({
+    shopId: ShopIdSchema,
+    role: MerchantRoleSchema,
+    plan: z.object({
+      id: PlanIdSchema,
+      name: z.string(),
+      priceUsd: z.number().nonnegative(),
+      monthlySessions: z.number().int().nonnegative(),
+      retentionDays: z.number().int().positive(),
+    }),
+    usage: UsageSnapshotSchema,
+    health: CaptureHealthSchema,
+    members: z
+      .array(
+        z
+          .object({
+            email: z.string().email().or(z.literal("shop-admin")),
+            role: MerchantRoleSchema,
+            lastSeenAt: z.string().datetime({ offset: true }).nullable(),
+          })
+          .strict(),
+      )
+      .max(50),
+  })
+  .strict();
+
+export type ShopWorkspace = z.infer<typeof ShopWorkspaceSchema>;
+
+export const BillingSelectRequestSchema = z
+  .object({
+    planId: PlanIdSchema,
+  })
+  .strict();
+
+export const PipelineEventSchema = z
+  .object({
+    id: z.string().min(1).max(64),
+    shopId: ShopIdSchema.nullable(),
+    service: z.enum(["collector", "analytics", "dashboard-api", "gateway"]),
+    level: z.enum(["info", "warn", "error"]),
+    code: z.string().min(1).max(64),
+    message: z.string().min(1).max(300),
+    requestId: z.string().max(64).nullable(),
+    at: z.string().datetime({ offset: true }),
+    ackedAt: z.string().datetime({ offset: true }).nullable(),
+  })
+  .strict();
+
+export type PipelineEvent = z.infer<typeof PipelineEventSchema>;
+
+export const OpsShopRowSchema = z
+  .object({
+    shopId: ShopIdSchema,
+    status: z.enum(["connected", "disconnected", "uninstalled"]),
+    planId: PlanIdSchema,
+    billableSessions: z.number().int().nonnegative(),
+    limit: z.number().int().nonnegative(),
+    lastReplayAt: z.string().datetime({ offset: true }).nullable(),
+    lastPixelAt: z.string().datetime({ offset: true }).nullable(),
+    lastErrorCode: z.string().max(64).nullable(),
+    health: CaptureHealthSchema.shape.hint,
+  })
+  .strict();
+
+export type OpsShopRow = z.infer<typeof OpsShopRowSchema>;
+
+export const OpsFleetResponseSchema = z
+  .object({
+    shops: z.array(OpsShopRowSchema).max(500),
+    totals: z
+      .object({
+        shops: z.number().int().nonnegative(),
+        connected: z.number().int().nonnegative(),
+        paused: z.number().int().nonnegative(),
+        errors24h: z.number().int().nonnegative(),
+        billableSessions: z.number().int().nonnegative(),
+      })
+      .strict(),
+    events: z.array(PipelineEventSchema).max(100),
+  })
+  .strict();
+
+export type OpsFleetResponse = z.infer<typeof OpsFleetResponseSchema>;
+
+export const StaffUserSchema = z
+  .object({
+    id: z.string().uuid(),
+    email: z.string().email(),
+    name: z.string().min(1).max(80),
+    role: StaffRoleSchema,
+    active: z.boolean(),
+  })
+  .strict();
+
+export type StaffUser = z.infer<typeof StaffUserSchema>;

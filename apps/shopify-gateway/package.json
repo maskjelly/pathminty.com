@@ -28,6 +28,7 @@
     "@cloudflare/vite-plugin": "^1.19.2",
     "@pathminty/cloudflare": "workspace:*",
     "@pathminty/contracts": "workspace:*",
+    "@pathminty/db": "workspace:*",
     "@react-router/dev": "^7.12.0",
     "@react-router/fs-routes": "^7.12.0",
     "@shopify/app-bridge-react": "^4.2.4",

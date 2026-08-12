@@ -17,8 +17,9 @@ export default function DataProtection() {
       </s-section>
       <s-section slot="aside" heading="Retention">
         <s-paragraph>
-          The first release will default to 30-day replay retention. Aggregated metrics
-          can remain after raw replay data expires.
+          Replay retention follows your plan: 14 days on Free, 30 on Launch, 60 on
+          Growth. Human-session counts reset each UTC month. Aggregated route stats can
+          remain after raw replay chunks expire.
         </s-paragraph>
       </s-section>
     </s-page>

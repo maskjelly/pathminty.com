@@ -9,11 +9,13 @@ import type {
   JourneyEdge,
   JourneyGraphResponse,
   JourneyNode,
+  OrderFact,
   ReplayBatch,
   RouteListResponse,
   RouteSort,
   RouteStat,
   RrwebEvent,
+  SessionQuality,
   SessionSummary,
   TimeRangePreset,
 } from "@pathminty/contracts";
@@ -161,13 +163,7 @@ export function buildRouteIndex(input: {
       session.exitRoute,
     ])) {
       if (query && !route.toLowerCase().includes(query)) continue;
-      const weights = routeEventWeight(
-        session,
-        route,
-        mode,
-        input.fromMs,
-        input.toMs,
-      );
+      const weights = routeEventWeight(session, route, mode, input.fromMs, input.toMs);
       // Include routes visited even without interactions so site map is complete.
       const existing = byRoute.get(route) ?? {
         sessionIds: new Set<string>(),
@@ -189,7 +185,11 @@ export function buildRouteIndex(input: {
       }
       if (session.hasFullSnapshot) existing.hasFullSnapshot = true;
       // Multi-touch: full order net revenue on every route in the purchasing path.
-      if (sessionRevenue > 0 && session.orderId && !existing.orderIds.has(session.orderId)) {
+      if (
+        sessionRevenue > 0 &&
+        session.orderId &&
+        !existing.orderIds.has(session.orderId)
+      ) {
         existing.orderIds.add(session.orderId);
         existing.netRevenueMinor += sessionRevenue;
         if (session.currency) existing.currency = session.currency;
@@ -235,7 +235,9 @@ export function buildRouteIndex(input: {
   const sorted = [...stats].sort((left, right) => {
     switch (sort) {
       case "least_active":
-        return left.eventCount - right.eventCount || left.route.localeCompare(right.route);
+        return (
+          left.eventCount - right.eventCount || left.route.localeCompare(right.route)
+        );
       case "sessions":
         return (
           right.sessionCount - left.sessionCount ||
@@ -438,9 +440,7 @@ export function buildJourneyGraph(input: {
   edges.sort((a, b) => b.sessionCount - a.sessionCount);
 
   return {
-    nodes: nodes.sort(
-      (a, b) => a.layer - b.layer || b.sessionCount - a.sessionCount,
-    ),
+    nodes: nodes.sort((a, b) => a.layer - b.layer || b.sessionCount - a.sessionCount),
     edges: edges.slice(0, 200),
     totalSessions: sessions.length,
     checkoutSessions,
@@ -449,8 +449,7 @@ export function buildJourneyGraph(input: {
     currency,
     from: new Date(input.fromMs).toISOString(),
     to: new Date(input.toMs).toISOString(),
-    conversionBasis:
-      orderIdsGlobal.size > 0 ? "verified_purchase" : "reached_checkout",
+    conversionBasis: orderIdsGlobal.size > 0 ? "verified_purchase" : "reached_checkout",
   };
 }
 
@@ -620,7 +619,7 @@ export function parseShopifyOrderPayload(
   shopId: string,
   payload: unknown,
   nowIso: string = new Date().toISOString(),
-): import("@pathminty/contracts").OrderFact | null {
+): OrderFact | null {
   const body = readRecord(payload);
   if (!body) return null;
   const shopifyOrderId = asOrderId(body.id);
@@ -632,9 +631,7 @@ export function parseShopifyOrderPayload(
   const gmvMinor = currentTotalMinor + discountsMinor;
   const cancelledAtRaw = body.cancelled_at;
   const isCancelled =
-    cancelledAtRaw !== null &&
-    cancelledAtRaw !== undefined &&
-    cancelledAtRaw !== "";
+    cancelledAtRaw !== null && cancelledAtRaw !== undefined && cancelledAtRaw !== "";
   const cancellationsMinor = isCancelled ? currentTotalMinor : 0;
   const refundsMinor = 0;
   const netRevenueMinor = Number(
@@ -678,10 +675,10 @@ export function parseShopifyOrderPayload(
  * Apply a refunds/create payload onto an existing order fact (idempotent max).
  */
 export function applyShopifyRefundToOrder(
-  order: import("@pathminty/contracts").OrderFact,
+  order: OrderFact,
   payload: unknown,
   nowIso: string = new Date().toISOString(),
-): import("@pathminty/contracts").OrderFact {
+): OrderFact {
   const body = readRecord(payload);
   if (!body) return order;
 
@@ -741,9 +738,7 @@ export function findSessionForOrder(
 
   const token = options.checkoutToken?.trim();
   if (token) {
-    const byToken = sessions.find((session) =>
-      session.checkoutTokens?.includes(token),
-    );
+    const byToken = sessions.find((session) => session.checkoutTokens?.includes(token));
     if (byToken) return byToken;
   }
 
@@ -772,7 +767,7 @@ export function findSessionForOrder(
 /** Merge verified order revenue onto a session summary (preserves existing tokens). */
 export function attachOrderToSession(
   session: SessionSummary,
-  order: import("@pathminty/contracts").OrderFact,
+  order: OrderFact,
 ): SessionSummary {
   const tokens = new Set(session.checkoutTokens ?? []);
   if (order.checkoutToken) tokens.add(order.checkoutToken);
@@ -835,11 +830,13 @@ const RRWEB = {
 
 const MAX_HOVERS_PER_SESSION = 400;
 const MAX_CLICKS = 2_000;
+const MAX_SCROLL_SAMPLES = 400;
 
 type MutableSummary = {
   timestamps: number[];
   clicks: HeatmapClick[];
   hovers: HeatmapHover[];
+  scrolls: HeatmapHover[];
   eventCount: number;
   pointerMoveCount: number;
   clickCount: number;
@@ -861,6 +858,7 @@ function emptyMutable(viewport: ReplayBatch["viewport"]): MutableSummary {
     timestamps: [],
     clicks: [],
     hovers: [],
+    scrolls: [],
     eventCount: 0,
     pointerMoveCount: 0,
     clickCount: 0,
@@ -941,6 +939,15 @@ function processJsonPayload(
     }
     if (event.type === "scroll") {
       state.maxScrollDepth = Math.max(state.maxScrollDepth, event.depth);
+      if (state.scrolls.length < MAX_SCROLL_SAMPLES) {
+        state.scrolls.push({
+          at: event.at,
+          route: batch.route,
+          x: 0.5,
+          y: event.depth,
+          dwellMs: 1,
+        });
+      }
     }
     if (event.type !== "pointer_down") continue;
     state.clickCount += 1;
@@ -995,6 +1002,15 @@ function processRrwebPayload(
         state.viewportHeight,
       );
       state.maxScrollDepth = Math.max(state.maxScrollDepth, depth);
+      if (state.scrolls.length < MAX_SCROLL_SAMPLES) {
+        state.scrolls.push({
+          at: event.timestamp,
+          route: batch.route,
+          x: 0.5,
+          y: depth,
+          dwellMs: 1,
+        });
+      }
       continue;
     }
 
@@ -1097,6 +1113,50 @@ export function resolveSessionStatus(
   return "active";
 }
 
+export function classifySessionQuality(input: {
+  durationMs: number;
+  clickCount: number;
+  eventCount: number;
+  pointerMoveCount: number;
+  hasFullSnapshot: boolean;
+}): SessionQuality {
+  if (
+    input.durationMs < 1_500 &&
+    input.clickCount === 0 &&
+    input.pointerMoveCount < 3
+  ) {
+    return "likely_bot";
+  }
+  if (input.durationMs < 3_000 && input.clickCount === 0 && !input.hasFullSnapshot) {
+    return "likely_bot";
+  }
+  if (input.durationMs < 4_000 && input.eventCount < 8) return "short";
+  return "human";
+}
+
+/** 3+ clicks within 800ms and 4% document distance. */
+export function countRageClicks(
+  clicks: readonly { at: number; x: number; y: number }[],
+): number {
+  if (clicks.length < 3) return 0;
+  const ordered = [...clicks].sort((left, right) => left.at - right.at);
+  let rage = 0;
+  for (let index = 0; index < ordered.length; index += 1) {
+    const origin = ordered[index];
+    if (!origin) continue;
+    let cluster = 1;
+    for (let next = index + 1; next < ordered.length; next += 1) {
+      const candidate = ordered[next];
+      if (!candidate) break;
+      if (candidate.at - origin.at > 800) break;
+      const distance = Math.hypot(candidate.x - origin.x, candidate.y - origin.y);
+      if (distance <= 0.04) cluster += 1;
+    }
+    if (cluster >= 3) rage += 1;
+  }
+  return rage;
+}
+
 export function summarizeReplayBatches(
   input: readonly ReplayBatch[],
   options: { isFinal?: boolean; nowMs?: number } = {},
@@ -1186,6 +1246,15 @@ export function summarizeReplayBatches(
     hasFullSnapshot: state.hasFullSnapshot,
     clicks: state.clicks,
     hovers: state.hovers,
+    quality: classifySessionQuality({
+      durationMs: Math.max(0, endedMs - startedMs),
+      clickCount: state.clickCount,
+      eventCount: state.eventCount,
+      pointerMoveCount: state.pointerMoveCount,
+      hasFullSnapshot: state.hasFullSnapshot,
+    }),
+    rageClickCount: countRageClicks(state.clicks),
+    ...(state.scrolls.length > 0 ? { scrolls: state.scrolls } : {}),
   };
 }
 
@@ -1339,6 +1408,16 @@ export function buildHeatmap(input: {
         if (click.route !== input.route) continue;
         if (!eventInRange(click.at, fromMs, toMs)) continue;
         rawPoints.push({ x: click.x, y: click.y, weight: 1 });
+      }
+    } else if (input.mode === "scroll") {
+      const samples = session.scrolls ?? [];
+      if (samples.length === 0 && session.maxScrollDepth > 0) {
+        rawPoints.push({ x: 0.5, y: session.maxScrollDepth, weight: 1 });
+      }
+      for (const sample of samples) {
+        if (sample.route !== input.route) continue;
+        if (!eventInRange(sample.at, fromMs, toMs)) continue;
+        rawPoints.push({ x: sample.x, y: sample.y, weight: 1 });
       }
     } else {
       for (const hover of session.hovers) {

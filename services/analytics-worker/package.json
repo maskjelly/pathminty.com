@@ -19,6 +19,7 @@
     "@pathminty/analytics": "workspace:*",
     "@pathminty/cloudflare": "workspace:*",
     "@pathminty/contracts": "workspace:*",
+    "@pathminty/db": "workspace:*",
     "@pathminty/observability": "workspace:*"
   },
   "devDependencies": {
