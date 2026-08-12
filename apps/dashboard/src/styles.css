@@ -526,7 +526,7 @@ body {
   color: #fff;
 }
 
-/* —— Site canvas —— */
+/* —— Site canvas (flow graph) —— */
 .site-canvas-section {
   display: flex;
   flex-direction: column;
@@ -542,29 +542,35 @@ body {
   margin: 0;
   overflow: hidden;
   border: 0;
-  border-radius: 0;
   background: var(--bg);
 }
 .site-canvas-chrome {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 8px;
-  padding: 6px 12px;
+  gap: 12px;
+  padding: 8px 12px;
   border-bottom: 1px solid var(--border);
-  color: var(--text-secondary);
   background: var(--bg);
-  font-size: 12px;
+}
+.site-canvas-legend {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
 }
 .site-canvas-eyebrow {
-  font-size: 12px;
-  letter-spacing: 0;
-  text-transform: none;
-  opacity: 1;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 700;
+}
+.site-canvas-hint {
   color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.35;
 }
 .site-canvas-tools {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   gap: 4px;
 }
@@ -573,6 +579,20 @@ body {
   color: var(--text-muted);
   font-size: 12px;
   text-align: right;
+}
+.site-canvas-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+  font-size: 12px;
+  background: var(--bg-elevated);
+}
+.site-canvas-stats strong {
+  color: var(--text);
+  font-weight: 700;
 }
 .site-canvas-viewport {
   position: relative;
@@ -592,48 +612,106 @@ body {
   transform-origin: 0 0;
   will-change: transform;
 }
+.site-canvas-col-label {
+  position: absolute;
+  width: 300px;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
 .site-canvas-edges {
   position: absolute;
   top: 0;
   left: 0;
-  pointer-events: stroke;
   overflow: visible;
+  pointer-events: none;
 }
+.site-canvas-edge-group {
+  pointer-events: stroke;
+  cursor: default;
+}
+.site-canvas-edge-hit {
+  pointer-events: stroke;
+}
+.site-canvas-edge-label {
+  fill: var(--bg-elevated);
+  stroke: var(--border);
+  stroke-width: 1;
+}
+.site-canvas-edge-label.active {
+  fill: #0a1929;
+  stroke: var(--blue);
+}
+.site-canvas-edge-label-text {
+  fill: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 600;
+  font-family: var(--font);
+  pointer-events: none;
+}
+.site-canvas-edge-label-text.active {
+  fill: var(--blue);
+}
+
 .site-canvas-card {
   position: absolute;
+  display: grid;
+  grid-template-rows: auto auto 1fr auto auto auto;
   overflow: hidden;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg);
-  box-shadow: none;
-  cursor: default;
+  transition: border-color 0.12s ease, opacity 0.12s ease;
+}
+.site-canvas-card[data-dimmed="true"] {
+  opacity: 0.28;
+}
+.site-canvas-card[data-highlight="true"] {
+  border-color: var(--blue);
+  opacity: 1;
 }
 .site-canvas-card:hover {
   border-color: var(--text-muted);
   background: var(--bg-elevated);
-  box-shadow: none;
 }
 .site-canvas-card-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  height: 32px;
+  height: 30px;
   padding: 0 8px;
   border-bottom: 1px solid var(--border);
-  background: var(--bg);
 }
-.site-canvas-card-bar span {
-  overflow: hidden;
+.site-canvas-kind {
+  padding: 2px 6px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.site-canvas-kind[data-kind="home"] {
   color: var(--text);
-  font-size: 12px;
-  font-weight: 600;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  border-color: var(--text-muted);
+}
+.site-canvas-kind[data-kind="checkout"],
+.site-canvas-kind[data-kind="cart"] {
+  color: var(--green);
+  border-color: rgb(0 186 124 / 40%);
+}
+.site-canvas-kind[data-kind="product"] {
+  color: var(--blue);
+  border-color: rgb(29 155 240 / 35%);
 }
 .site-canvas-card-bar button {
   flex-shrink: 0;
-  height: 24px;
+  height: 22px;
   padding: 0 8px;
   border: 0;
   border-radius: var(--radius);
@@ -646,32 +724,8 @@ body {
 .site-canvas-card-bar button:hover {
   background: var(--blue-hover);
 }
-.site-canvas-card-preview {
-  position: relative;
-  /* Landscape laptop fold (~16:10) */
-  height: 200px;
-  overflow: hidden;
-  background: #0f0f0f;
-}
-.site-canvas-card-meta {
-  padding: 6px 8px 8px;
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-.site-canvas-edge-tip {
-  position: absolute;
-  right: 8px;
-  bottom: 8px;
-  max-width: min(320px, calc(100% - 16px));
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-elevated);
-  box-shadow: none;
-  pointer-events: none;
-}
-.site-canvas-edge-tip strong {
-  display: block;
+.site-canvas-card-title {
+  padding: 6px 8px 4px;
   overflow: hidden;
   color: var(--text);
   font-size: 13px;
@@ -679,17 +733,125 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.site-canvas-edge-tip span {
+.site-canvas-card-preview {
+  position: relative;
+  height: 120px;
+  margin: 0 8px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  background: #0f0f0f;
+}
+.site-canvas-card-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 8px;
+  padding: 8px;
+}
+.site-canvas-card-metrics div {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+.site-canvas-card-metrics strong {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.15;
+}
+.site-canvas-card-metrics span {
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.2;
+}
+.site-canvas-card-flow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+.site-canvas-card-bar-track {
+  height: 3px;
+  margin: 0;
+  background: var(--border);
+}
+.site-canvas-card-bar-track i {
   display: block;
-  margin-top: 4px;
+  height: 100%;
+  background: var(--blue);
+}
+
+.site-canvas-edge-tip {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  z-index: 5;
+  width: min(340px, calc(100% - 20px));
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  pointer-events: none;
+}
+.site-canvas-edge-tip-path {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 600;
+}
+.site-canvas-edge-tip-path code,
+.site-canvas-edge-tip code {
+  overflow: hidden;
+  max-width: 140px;
+  padding: 1px 4px;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  color: var(--text);
+  background: var(--bg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.site-canvas-edge-tip p {
+  margin: 0 0 6px;
   color: var(--text-secondary);
   font-size: 12px;
+  line-height: 1.35;
+}
+.site-canvas-edge-tip p:last-child {
+  margin-bottom: 0;
+}
+.site-canvas-edge-tip strong {
+  color: var(--text);
+  font-weight: 700;
+}
+.site-canvas-edge-tip-share {
+  color: var(--text-muted) !important;
 }
 .site-canvas-empty {
   display: grid;
-  place-items: center;
-  min-height: 200px;
+  gap: 6px;
+  place-content: center;
+  justify-items: center;
+  min-height: 240px;
+  padding: 24px;
   color: var(--text-secondary);
+  text-align: center;
+}
+.site-canvas-empty p {
+  margin: 0;
+  color: var(--text);
+  font-size: 15px;
+  font-weight: 700;
+}
+.site-canvas-empty span {
+  font-size: 13px;
 }
 
 .route-card-skeleton {
