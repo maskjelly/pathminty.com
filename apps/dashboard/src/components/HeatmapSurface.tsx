@@ -8,11 +8,11 @@ import { useEffect, useRef } from "react";
 import { Replayer, type eventWithTime } from "rrweb";
 import "rrweb/dist/style.css";
 
+import { drawExactHeat } from "../exactHeat";
 import {
   computeHeatmapDisplayLayout,
   heatmapRrwebWrapperPinStyles,
 } from "../heatmapLayout";
-import { drawTopographicHeat } from "../topographicHeat";
 
 function drawHeatLayer(
   canvas: HTMLCanvasElement,
@@ -20,13 +20,8 @@ function drawHeatLayer(
   width: number,
   height: number,
 ) {
-  // Backing store + CSS size must match the full document display so scroll
-  // keeps the heat layer aligned over the entire reconstructed page.
-  drawTopographicHeat(canvas, points, width, height, {
-    gridWidth: Math.min(140, Math.max(72, Math.round(width / 10))),
-    blurPasses: 3,
-    contours: true,
-  });
+  // Exact click/hover positions — not a smeared density field.
+  drawExactHeat(canvas, points, width, height);
 }
 
 function toRrwebEvents(events: readonly RrwebEvent[]): eventWithTime[] {
@@ -270,10 +265,10 @@ export function HeatmapSurface({
         <canvas aria-hidden="true" className="heatmap-canvas" ref={canvasRef} />
       </div>
       <div className="heatmap-footer">
-        <div className="heatmap-legend" aria-label="Intensity legend">
-          <span>Low</span>
+        <div className="heatmap-legend" aria-label="Click intensity">
+          <span>Fewer</span>
           <i />
-          <span>High</span>
+          <span>More clicks</span>
         </div>
         <p>
           {heatmap.eventCount} {heatmap.mode === "click" ? "clicks" : "hover samples"} ·{" "}

@@ -4,7 +4,6 @@ import {
   CursorClick,
   DeviceMobile,
   DeviceTablet,
-  GitBranch,
   MapTrifold,
   Monitor,
   Play,
@@ -39,16 +38,14 @@ import {
 } from "./api/sessions";
 import { ActivityTimeline } from "./components/ActivityTimeline";
 import { HeatmapSurface } from "./components/HeatmapSurface";
-import { JourneyFlow } from "./components/JourneyFlow";
 import { ReplayViewer } from "./components/ReplayViewer";
-import { RouteCardPreview } from "./components/RouteCardPreview";
+import { SiteCanvas } from "./components/SiteCanvas";
 
-type View = "Heatmaps" | "Journeys" | "Recordings";
+type View = "Heatmaps" | "Recordings";
 type HeatmapPane = "map" | "route";
 
 const views: Array<{ label: View; icon: typeof MapTrifold }> = [
   { label: "Heatmaps", icon: MapTrifold },
-  { label: "Journeys", icon: GitBranch },
   { label: "Recordings", icon: Record },
 ];
 
@@ -164,7 +161,6 @@ export function LiveDashboard() {
   const [heatmapLoading, setHeatmapLoading] = useState(false);
   const [mapLoading, setMapLoading] = useState(false);
   const [journey, setJourney] = useState<JourneyGraphResponse | null>(null);
-  const [journeyLoading, setJourneyLoading] = useState(false);
   const [replay, setReplay] = useState<ReplaySessionResponse | null>(null);
   const [replayOpen, setReplayOpen] = useState(false);
   const [replayLoading, setReplayLoading] = useState(false);
@@ -194,16 +190,22 @@ export function LiveDashboard() {
           limit: routeLimit,
           ...(routeQuery.trim() ? { query: routeQuery.trim() } : {}),
         };
-        const [routes, timeline] = await Promise.all([
+        const [routes, timeline, graph] = await Promise.all([
           getRoutes(shop, routeOptions),
           getActivity(shop, {
             time: timeQuery,
             device,
             mode: heatmapMode,
           }),
+          getJourneys(shop, {
+            time: timeQuery,
+            device,
+            maxNodes: 32,
+          }).catch(() => null),
         ]);
         setRouteIndex(routes);
         setActivity(timeline);
+        setJourney(graph);
 
         const paths = routes.routes.map((item) => item.route);
         if (paths.length > 0) {
@@ -213,7 +215,7 @@ export function LiveDashboard() {
             mode: heatmapMode,
             time: timeQuery,
             snapshot: true,
-            snapshotLimit: 8,
+            snapshotLimit: 12,
           });
           const next: Record<string, HeatmapResponse> = {};
           for (const item of batch) next[item.route] = item;
@@ -231,28 +233,6 @@ export function LiveDashboard() {
       }
     },
     [timeQuery, device, heatmapMode, routeSort, routeLimit, routeQuery],
-  );
-
-  const loadJourneys = useCallback(
-    async (shop: string) => {
-      setJourneyLoading(true);
-      try {
-        const graph = await getJourneys(shop, {
-          time: timeQuery,
-          device,
-          maxNodes: 24,
-        });
-        setJourney(graph);
-        setError("");
-      } catch (caught) {
-        setError(
-          caught instanceof Error ? caught.message : "Unable to load journeys.",
-        );
-      } finally {
-        setJourneyLoading(false);
-      }
-    },
-    [timeQuery, device],
   );
 
   // Route-scoped timeline while drilling into a page heatmap.
@@ -323,11 +303,6 @@ export function LiveDashboard() {
     if (!shopId || view !== "Heatmaps") return;
     void loadSiteMap(shopId);
   }, [shopId, view, loadSiteMap]);
-
-  useEffect(() => {
-    if (!shopId || view !== "Journeys") return;
-    void loadJourneys(shopId);
-  }, [shopId, view, loadJourneys]);
 
   // Sessions for recordings tab (and manual refresh).
   useEffect(() => {
@@ -455,10 +430,6 @@ export function LiveDashboard() {
       });
       return;
     }
-    if (view === "Journeys") {
-      void loadJourneys(shopId);
-      return;
-    }
     void loadSiteMap(shopId);
   };
 
@@ -470,17 +441,11 @@ export function LiveDashboard() {
         : activeCount > 0
           ? `${activeCount} active · live`
           : "Live when tab open"
-      : view === "Journeys"
-        ? journeyLoading
-          ? "Loading journeys…"
-          : journey
-            ? `${journey.nodes.length} nodes · ${timePreset}`
-            : "Journeys"
-        : mapLoading
-          ? "Loading map…"
-          : routeIndex
-            ? `${routeIndex.totalRoutes} routes · ${timePreset}`
-            : "Site map";
+      : mapLoading
+        ? "Loading canvas…"
+        : routeIndex
+          ? `${routeIndex.totalRoutes} pages · ${timePreset}`
+          : "Canvas";
 
   const showTimeline = Boolean(activity && activity.buckets.length > 0);
 
@@ -524,10 +489,8 @@ export function LiveDashboard() {
               {view === "Heatmaps"
                 ? heatmapPane === "route"
                   ? "Route heatmap"
-                  : "Site map"
-                : view === "Journeys"
-                  ? "Journeys"
-                  : view}
+                  : "Site canvas"
+                : view}
             </h1>
           </div>
           <div className="topbar-actions">
@@ -564,7 +527,7 @@ export function LiveDashboard() {
                   onClick={() => setSelectedRoute(null)}
                   type="button"
                 >
-                  <ArrowLeft size={14} /> Site map
+                  <ArrowLeft size={14} /> Canvas
                 </button>
               ) : null}
               <div className="mode-switch" aria-label="Time range">
@@ -711,48 +674,26 @@ export function LiveDashboard() {
                 <HeatmapSurface heatmap={heatmap} loading={heatmapLoading} />
               </div>
             ) : (
-              <section className="site-map" aria-label="Site map">
+              <section className="site-canvas-section" aria-label="Site canvas">
                 {mapLoading && !routeIndex ? (
-                  <p className="site-map-status">Building site map…</p>
+                  <p className="site-map-status">Building canvas…</p>
                 ) : routeIndex && routeIndex.routes.length === 0 ? (
                   <EmptySessions onRefresh={refresh} />
                 ) : (
                   <>
-                    <div className="site-map-grid">
-                      {routeIndex?.routes.map((stat, index) => {
-                        const mini = miniHeatmaps[stat.route];
-                        return (
-                          <button
-                            className="route-card"
-                            key={stat.route}
-                            onClick={() => setSelectedRoute(stat.route)}
-                            type="button"
-                          >
-                            <div className="route-card-preview">
-                              <RouteCardPreview
-                                heatmap={mini}
-                                active={index < 8}
-                              />
-                              <span className="route-rank">#{index + 1}</span>
-                            </div>
-                            <div className="route-card-body">
-                              <strong title={stat.route}>{stat.route}</strong>
-                              <span>
-                                {stat.eventCount} events · {stat.sessionCount} sessions
-                              </span>
-                              <small>Last {relativeTime(stat.lastSeenAt)}</small>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
+                    <SiteCanvas
+                      routes={routeIndex?.routes ?? []}
+                      heatmaps={miniHeatmaps}
+                      journey={journey}
+                      onOpenRoute={setSelectedRoute}
+                    />
                     {routeIndex && routeIndex.totalRoutes > routeLimit && (
                       <button
                         className="control show-more"
                         onClick={() => setRouteLimit((value) => value + SITE_MAP_PAGE)}
                         type="button"
                       >
-                        Show more routes ({routeIndex.totalRoutes - routeLimit} left)
+                        Load more pages ({routeIndex.totalRoutes - routeLimit} left)
                       </button>
                     )}
                   </>
@@ -768,66 +709,6 @@ export function LiveDashboard() {
               />
             )}
           </>
-        )}
-
-        {view === "Journeys" && (
-          <div className="journey-view">
-            <section className="live-toolbar site-toolbar">
-              <div className="mode-switch" aria-label="Time range">
-                {TIME_PRESETS.map((preset) => (
-                  <button
-                    key={preset.id}
-                    data-active={timePreset === preset.id}
-                    onClick={() => setTimePreset(preset.id)}
-                    type="button"
-                  >
-                    {preset.label}
-                  </button>
-                ))}
-              </div>
-              <div className="device-switch" aria-label="Device">
-                <button
-                  data-active={device === "all"}
-                  onClick={() => setDevice("all")}
-                  type="button"
-                >
-                  All
-                </button>
-                <button
-                  data-active={device === "desktop"}
-                  onClick={() => setDevice("desktop")}
-                  type="button"
-                >
-                  <Monitor size={16} />
-                </button>
-                <button
-                  data-active={device === "mobile"}
-                  onClick={() => setDevice("mobile")}
-                  type="button"
-                >
-                  <DeviceMobile size={16} />
-                </button>
-              </div>
-              <span className="journey-hint">
-                Thick edges = heavy traffic · Hover nodes/edges for checkout-reach %
-              </span>
-            </section>
-            {journeyLoading && !journey ? (
-              <p className="site-map-status" style={{ padding: "24px" }}>
-                Mapping journeys…
-              </p>
-            ) : journey ? (
-              <JourneyFlow
-                graph={journey}
-                onSelectRoute={(route) => {
-                  setView("Heatmaps");
-                  setSelectedRoute(route);
-                }}
-              />
-            ) : (
-              <EmptySessions onRefresh={refresh} />
-            )}
-          </div>
         )}
 
         {view === "Recordings" &&

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Replayer, type eventWithTime } from "rrweb";
 import "rrweb/dist/style.css";
 
-import { drawTopographicHeat } from "../topographicHeat";
+import { drawExactHeatCompact } from "../exactHeat";
 import { MiniHeatmap } from "./MiniHeatmap";
 
 function toRrwebEvents(
@@ -103,11 +103,7 @@ export function RouteCardPreview({
       host.style.height = `${displayH}px`;
 
       if (heat) {
-        drawTopographicHeat(heat, heatmap.points, displayW, displayH, {
-          gridWidth: 64,
-          blurPasses: 2,
-          contours: false,
-        });
+        drawExactHeatCompact(heat, heatmap.points, displayW, displayH);
         heat.style.width = "100%";
         heat.style.height = "100%";
       }
