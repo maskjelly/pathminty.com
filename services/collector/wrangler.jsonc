@@ -1,0 +1,88 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "account_id": "df5619dec5fc464c8b2d0228294858fd",
+  "name": "pathminty-collector-dev",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": true,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+  },
+  "vars": {
+    "ENVIRONMENT": "development",
+  },
+  "kv_namespaces": [
+    {
+      "binding": "SHOPIFY_INSTALLATIONS",
+      "id": "0eda94222fa94be59ed1b01489a49819",
+      "remote": true,
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "REPLAY_BUCKET",
+      "bucket_name": "pathminty-replays-dev",
+    },
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "SESSION_JOBS",
+        "queue": "pathminty-session-jobs-dev",
+      },
+    ],
+  },
+  "env": {
+    "staging": {
+      "name": "pathminty-collector-staging",
+      "vars": { "ENVIRONMENT": "staging" },
+      "kv_namespaces": [
+        {
+          "binding": "SHOPIFY_INSTALLATIONS",
+          "id": "03644b9aacfe4aaab651727d5f0e869a",
+        },
+      ],
+      "r2_buckets": [
+        {
+          "binding": "REPLAY_BUCKET",
+          "bucket_name": "pathminty-replays-staging",
+        },
+      ],
+      "queues": {
+        "producers": [
+          {
+            "binding": "SESSION_JOBS",
+            "queue": "pathminty-session-jobs-staging",
+          },
+        ],
+      },
+    },
+    "production": {
+      "name": "pathminty-collector-production",
+      "vars": { "ENVIRONMENT": "production" },
+      "kv_namespaces": [
+        {
+          "binding": "SHOPIFY_INSTALLATIONS",
+          "id": "ce4d49353861413ba544371c1348bd6d",
+        },
+      ],
+      "r2_buckets": [
+        {
+          "binding": "REPLAY_BUCKET",
+          "bucket_name": "pathminty-replays-production",
+        },
+      ],
+      "queues": {
+        "producers": [
+          {
+            "binding": "SESSION_JOBS",
+            "queue": "pathminty-session-jobs-production",
+          },
+        ],
+      },
+    },
+  },
+}

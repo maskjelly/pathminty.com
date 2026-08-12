@@ -1,0 +1,25 @@
+{
+  "name": "@pathminty/local-platform",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "cf:types": "wrangler types worker-configuration.d.ts",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "dev": "wrangler dev --port 8787 --persist-to ../../.local-data/pathminty",
+    "lint": "eslint src",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pathminty/contracts": "workspace:*",
+    "@pathminty/analytics-worker": "workspace:*",
+    "@pathminty/collector": "workspace:*",
+    "@pathminty/dashboard-api": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^3.2.7",
+    "wrangler": "4.120.1"
+  }
+}

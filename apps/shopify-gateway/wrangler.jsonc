@@ -1,0 +1,35 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "account_id": "df5619dec5fc464c8b2d0228294858fd",
+  "name": "pathminty-shopify-gateway-dev",
+  "main": "./workers/app.ts",
+  "compatibility_date": "2026-08-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "vars": {
+    "SHOPIFY_API_KEY": "62b97c0201c60add657038e08ce9ba95",
+    "SHOPIFY_APP_URL": "https://pathminty-shopify-gateway-dev.pathminty-collector.workers.dev",
+    "SCOPES": "read_customer_events,read_pixels,write_pixels,write_app_proxy",
+    "PATHMINTY_COLLECTOR_URL": "https://pathminty-collector-dev.pathminty-collector.workers.dev",
+    "PATHMINTY_DASHBOARD_URL": "https://pathminty-dashboard-dev.pathminty-collector.workers.dev",
+  },
+  "kv_namespaces": [
+    { "binding": "SHOPIFY_SESSIONS", "id": "73ef50edc0004fc3a9a6b137b8b002b9" },
+    {
+      "binding": "SHOPIFY_INSTALLATIONS",
+      "id": "0eda94222fa94be59ed1b01489a49819",
+      "remote": true,
+    },
+  ],
+  "services": [
+    {
+      "binding": "COLLECTOR",
+      "service": "pathminty-collector-dev",
+    },
+  ],
+  "queues": {
+    "producers": [
+      { "binding": "SHOPIFY_WEBHOOKS", "queue": "pathminty-shopify-webhooks-dev" },
+    ],
+  },
+}

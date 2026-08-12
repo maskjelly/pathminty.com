@@ -1,0 +1,19 @@
+{% assign recorder_config = app.metafields.pathminty.recorder_config.value %}
+
+{% if recorder_config != blank %}
+  <span
+    data-pathminty-recorder
+    data-config="{{ recorder_config | json | escape }}"
+    data-runtime-src="{{ 'pathminty-recorder-runtime.js' | asset_url }}"
+    hidden
+  ></span>
+{% endif %}
+
+{% schema %}
+{
+  "name": "t:pathminty.name",
+  "target": "body",
+  "javascript": "pathminty-recorder-loader.js",
+  "settings": []
+}
+{% endschema %}

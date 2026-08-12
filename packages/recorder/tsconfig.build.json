@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "outDir": "dist", "rootDir": "src", "types": [] },
+  "exclude": [
+    "test",
+    "scripts",
+    "src/storefront-entry.ts",
+    "src/storefront-loader.ts",
+    "src/storefront-runtime.ts"
+  ]
+}

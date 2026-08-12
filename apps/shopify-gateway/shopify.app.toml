@@ -1,0 +1,70 @@
+# Learn more about configuring your app at https://shopify.dev/docs/apps/tools/cli/configuration
+
+client_id = "62b97c0201c60add657038e08ce9ba95"
+application_url = "https://example.com"
+embedded = true
+name = "PathMinty"
+
+[access_scopes]
+# Learn more at https://shopify.dev/docs/apps/tools/cli/configuration#access_scopes
+scopes = "read_orders,read_customer_events,read_pixels,write_pixels,write_app_proxy"
+
+[webhooks]
+api_version = "2026-07"
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/uninstalled"
+  topics = [ "app/uninstalled" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/app/scopes_update"
+  topics = [ "app/scopes_update" ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/orders/create"
+  topics = [ "orders/create", "orders/updated" ]
+  include_fields = [
+    "id",
+    "admin_graphql_api_id",
+    "checkout_token",
+    "created_at",
+    "updated_at",
+    "currency",
+    "current_total_price",
+    "current_total_discounts",
+    "current_total_tax",
+    "cancelled_at",
+    "financial_status",
+  ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/refunds/create"
+  topics = [ "refunds/create" ]
+  include_fields = [
+    "id",
+    "order_id",
+    "created_at",
+    "processed_at",
+    "transactions.id",
+    "transactions.amount",
+    "transactions.currency",
+    "refund_line_items.id",
+    "refund_line_items.subtotal",
+    "refund_line_items.total_tax",
+  ]
+
+  [[webhooks.subscriptions]]
+  uri = "/webhooks/compliance"
+  compliance_topics = [ "customers/data_request", "customers/redact", "shop/redact" ]
+
+[auth]
+redirect_urls = [ "https://example.com/api/auth" ]
+
+[app_proxy]
+url = "/pathminty-proxy"
+prefix = "apps"
+subpath = "pathminty"
+
+[build]
+include_config_on_deploy = true
+automatically_update_urls_on_dev = true

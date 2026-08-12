@@ -1,0 +1,36 @@
+{
+  "name": "pathminty",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Revenue-linked storefront behavior intelligence for Shopify merchants.",
+  "license": "UNLICENSED",
+  "type": "module",
+  "packageManager": "pnpm@11.5.1",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "check": "turbo run lint typecheck test build",
+    "clean": "turbo run clean",
+    "dev": "turbo run dev --parallel",
+    "dev:collector": "pnpm --filter @pathminty/collector dev",
+    "dev:dashboard": "pnpm --filter @pathminty/dashboard dev",
+    "dev:local-platform": "pnpm --filter @pathminty/local-platform dev",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "cf:types": "turbo run cf:types"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.1",
+    "@types/node": "^22.18.8",
+    "eslint": "^9.39.1",
+    "prettier": "^3.6.2",
+    "turbo": "^2.5.8",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.46.1"
+  }
+}

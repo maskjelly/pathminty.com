@@ -1,0 +1,6 @@
+name = "PathMinty gateway"
+roles = ["frontend", "backend"]
+webhooks_path = "/webhooks/app/uninstalled"
+
+[commands]
+dev = "pnpm exec react-router dev"

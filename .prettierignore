@@ -1,0 +1,11 @@
+.agents
+coverage
+dist
+node_modules
+pnpm-lock.yaml
+worker-configuration.d.ts
+
+# Generated Shopify theme extension bundles (esbuild minify); do not prettify.
+apps/shopify-gateway/extensions/pathminty-recorder/assets/pathminty-recorder.js
+apps/shopify-gateway/extensions/pathminty-recorder/assets/pathminty-recorder-loader.js
+apps/shopify-gateway/extensions/pathminty-recorder/assets/pathminty-recorder-runtime.js

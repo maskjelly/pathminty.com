@@ -1,0 +1,32 @@
+{
+  "name": "@pathminty/db",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\"",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "node --env-file-if-exists=../../.env.local --import tsx scripts/migrate.ts",
+    "db:verify": "node --env-file-if-exists=../../.env.local --import tsx scripts/verify-connection.ts",
+    "lint": "eslint src scripts drizzle.config.ts",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.44.6",
+    "pg": "^8.23.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.21.0",
+    "drizzle-kit": "^0.31.5",
+    "tsx": "^4.23.12",
+    "vitest": "^3.2.7"
+  }
+}

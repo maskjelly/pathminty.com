@@ -1,0 +1,77 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "account_id": "df5619dec5fc464c8b2d0228294858fd",
+  "name": "pathminty-analytics-worker-dev",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+  },
+  "vars": {
+    "ENVIRONMENT": "development",
+  },
+  "r2_buckets": [
+    {
+      "binding": "REPLAY_BUCKET",
+      "bucket_name": "pathminty-replays-dev",
+    },
+  ],
+  "queues": {
+    "consumers": [
+      {
+        "queue": "pathminty-session-jobs-dev",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "dead_letter_queue": "pathminty-session-jobs-dlq-dev",
+      },
+    ],
+  },
+  "env": {
+    "staging": {
+      "name": "pathminty-analytics-worker-staging",
+      "vars": { "ENVIRONMENT": "staging" },
+      "r2_buckets": [
+        {
+          "binding": "REPLAY_BUCKET",
+          "bucket_name": "pathminty-replays-staging",
+        },
+      ],
+      "queues": {
+        "consumers": [
+          {
+            "queue": "pathminty-session-jobs-staging",
+            "max_batch_size": 10,
+            "max_batch_timeout": 5,
+            "max_retries": 5,
+            "dead_letter_queue": "pathminty-session-jobs-dlq-staging",
+          },
+        ],
+      },
+    },
+    "production": {
+      "name": "pathminty-analytics-worker-production",
+      "vars": { "ENVIRONMENT": "production" },
+      "r2_buckets": [
+        {
+          "binding": "REPLAY_BUCKET",
+          "bucket_name": "pathminty-replays-production",
+        },
+      ],
+      "queues": {
+        "consumers": [
+          {
+            "queue": "pathminty-session-jobs-production",
+            "max_batch_size": 10,
+            "max_batch_timeout": 5,
+            "max_retries": 5,
+            "dead_letter_queue": "pathminty-session-jobs-dlq-production",
+          },
+        ],
+      },
+    },
+  },
+}

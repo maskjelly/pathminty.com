@@ -1,0 +1,2 @@
+# Development-only secret used to sign scoped storefront tokens.
+# Storefront installations are verified through the shared Cloudflare KV binding.

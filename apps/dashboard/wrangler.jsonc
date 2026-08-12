@@ -1,0 +1,46 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "account_id": "df5619dec5fc464c8b2d0228294858fd",
+  "name": "pathminty-dashboard-dev",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-08-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": true,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+  },
+  "services": [
+    {
+      "binding": "DASHBOARD_API",
+      "service": "pathminty-dashboard-api-dev",
+    },
+  ],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/healthz", "/v1/*"],
+  },
+  "env": {
+    "staging": {
+      "name": "pathminty-dashboard-staging",
+      "services": [
+        {
+          "binding": "DASHBOARD_API",
+          "service": "pathminty-dashboard-api-staging",
+        },
+      ],
+    },
+    "production": {
+      "name": "pathminty-dashboard-production",
+      "services": [
+        {
+          "binding": "DASHBOARD_API",
+          "service": "pathminty-dashboard-api-production",
+        },
+      ],
+    },
+  },
+}

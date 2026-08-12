@@ -1,0 +1,71 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "account_id": "df5619dec5fc464c8b2d0228294858fd",
+  "name": "pathminty-dashboard-api-dev",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "preview_urls": true,
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+  },
+  "vars": {
+    "ENVIRONMENT": "development",
+    "DASHBOARD_ORIGIN": "https://pathminty-dashboard-dev.pathminty-collector.workers.dev",
+  },
+  "kv_namespaces": [
+    {
+      "binding": "SHOPIFY_INSTALLATIONS",
+      "id": "0eda94222fa94be59ed1b01489a49819",
+      "remote": true,
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "REPLAY_BUCKET",
+      "bucket_name": "pathminty-replays-dev",
+    },
+  ],
+  "env": {
+    "staging": {
+      "name": "pathminty-dashboard-api-staging",
+      "vars": {
+        "ENVIRONMENT": "staging",
+        "DASHBOARD_ORIGIN": "https://pathminty-dashboard-staging.workers.dev",
+      },
+      "kv_namespaces": [
+        {
+          "binding": "SHOPIFY_INSTALLATIONS",
+          "id": "03644b9aacfe4aaab651727d5f0e869a",
+        },
+      ],
+      "r2_buckets": [
+        {
+          "binding": "REPLAY_BUCKET",
+          "bucket_name": "pathminty-replays-staging",
+        },
+      ],
+    },
+    "production": {
+      "name": "pathminty-dashboard-api-production",
+      "vars": {
+        "ENVIRONMENT": "production",
+        "DASHBOARD_ORIGIN": "https://pathminty-dashboard-production.workers.dev",
+      },
+      "kv_namespaces": [
+        {
+          "binding": "SHOPIFY_INSTALLATIONS",
+          "id": "ce4d49353861413ba544371c1348bd6d",
+        },
+      ],
+      "r2_buckets": [
+        {
+          "binding": "REPLAY_BUCKET",
+          "bucket_name": "pathminty-replays-production",
+        },
+      ],
+    },
+  },
+}

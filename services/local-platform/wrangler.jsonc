@@ -1,0 +1,42 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "account_id": "df5619dec5fc464c8b2d0228294858fd",
+  "name": "pathminty-local-platform",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-08",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false,
+  "vars": {
+    "ENVIRONMENT": "development",
+    "DASHBOARD_ORIGIN": "http://localhost:5173",
+  },
+  "kv_namespaces": [
+    {
+      "binding": "SHOPIFY_INSTALLATIONS",
+      "id": "0eda94222fa94be59ed1b01489a49819",
+      "remote": true,
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "REPLAY_BUCKET",
+      "bucket_name": "pathminty-replays-dev",
+    },
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "SESSION_JOBS",
+        "queue": "pathminty-session-jobs-dev",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "pathminty-session-jobs-dev",
+        "max_batch_size": 10,
+        "max_batch_timeout": 1,
+        "max_retries": 3,
+      },
+    ],
+  },
+}
