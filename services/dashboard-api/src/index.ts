@@ -1,14 +1,20 @@
 import {
   assessReplayReconstruction,
+  buildActivityTimeline,
   buildHeatmap,
+  buildRouteIndex,
   extractSnapshotEvents,
   resolveSessionStatus,
+  resolveTimePreset,
 } from "@pathminty/analytics";
 import { R2ReplayObjectStore } from "@pathminty/cloudflare";
 import {
   HeatmapModeSchema,
+  RouteSortSchema,
   ShopIdSchema,
+  TimeRangePresetSchema,
   type SessionSummary,
+  type TimeRangePreset,
 } from "@pathminty/contracts";
 import { Hono } from "hono";
 import { setCookie } from "hono/cookie";
@@ -23,6 +29,41 @@ function readCookie(header: string | undefined, name: string) {
   const prefix = `${name}=`;
   const part = header.split(";").find((item) => item.trim().startsWith(prefix));
   return part?.trim().slice(prefix.length);
+}
+
+function parseDevice(raw: string | undefined) {
+  const device = raw ?? "all";
+  return device === "all" ||
+    device === "desktop" ||
+    device === "tablet" ||
+    device === "mobile"
+    ? device
+    : null;
+}
+
+function parseTimeWindow(
+  request: { query: (key: string) => string | undefined },
+): { fromMs: number; toMs: number } | { error: string } {
+  const toRaw = request.query("to");
+  const fromRaw = request.query("from");
+  const presetRaw = request.query("preset");
+  const toMs = toRaw ? Date.parse(toRaw) : Date.now();
+  if (!Number.isFinite(toMs)) return { error: "Invalid to timestamp" };
+
+  if (fromRaw) {
+    const fromMs = Date.parse(fromRaw);
+    if (!Number.isFinite(fromMs)) return { error: "Invalid from timestamp" };
+    if (fromMs > toMs) return { error: "from must be before to" };
+    // Cap range at 31 days to bound work.
+    if (toMs - fromMs > 31 * 24 * 60 * 60 * 1_000) {
+      return { error: "Range cannot exceed 31 days" };
+    }
+    return { fromMs, toMs };
+  }
+
+  const preset = TimeRangePresetSchema.safeParse(presetRaw ?? "24h");
+  if (!preset.success) return { error: "Invalid time preset" };
+  return resolveTimePreset(preset.data as TimeRangePreset, toMs);
 }
 
 app.use("*", secureHeaders());
@@ -76,6 +117,18 @@ function refreshSessionStatus(summary: SessionSummary): SessionSummary {
   const status = resolveSessionStatus(summary.lastSeenAt, summary.status === "ended");
   if (status === summary.status) return summary;
   return { ...summary, status };
+}
+
+async function loadShopSessions(
+  bucket: R2Bucket,
+  shopId: string,
+  options: { includeTest?: boolean; limit?: number } = {},
+) {
+  const objectStore = new R2ReplayObjectStore(bucket);
+  const limit = options.limit ?? 100;
+  return (await objectStore.listSessionSummaries(shopId, limit))
+    .filter((session) => options.includeTest || session.source !== "test")
+    .map(refreshSessionStatus);
 }
 
 app.post("/v1/auth/exchange", async (context) => {
@@ -163,13 +216,103 @@ app.get("/v1/shops/:shopId/sessions", async (context) => {
 
   const rawLimit = Number(context.req.query("limit") ?? "50");
   const limit = Number.isInteger(rawLimit) ? Math.min(Math.max(rawLimit, 1), 100) : 50;
-  // Test sessions are hidden by default; only automated tests may request them.
   const includeTest = context.req.query("includeTest") === "1";
-  const objectStore = new R2ReplayObjectStore(context.env.REPLAY_BUCKET);
-  const sessions = (await objectStore.listSessionSummaries(shop.data, limit))
-    .filter((session) => includeTest || session.source !== "test")
-    .map(refreshSessionStatus);
-  return context.json({ sessions });
+  const window = parseTimeWindow(context.req);
+  if ("error" in window) return context.json({ error: window.error }, 400);
+
+  const device = parseDevice(context.req.query("device") ?? undefined);
+  if (!device) return context.json({ error: "Invalid device" }, 400);
+
+  const sessions = (await loadShopSessions(context.env.REPLAY_BUCKET, shop.data, {
+    includeTest,
+    limit: 100,
+  })).filter((session) => {
+    if (device !== "all" && session.device !== device) return false;
+    const started = Date.parse(session.startedAt);
+    const lastSeen = Date.parse(session.lastSeenAt);
+    return lastSeen >= window.fromMs && started <= window.toMs;
+  });
+
+  return context.json({
+    sessions: sessions.slice(0, limit),
+    from: new Date(window.fromMs).toISOString(),
+    to: new Date(window.toMs).toISOString(),
+  });
+});
+
+app.get("/v1/shops/:shopId/routes", async (context) => {
+  const shop = ShopIdSchema.safeParse(context.req.param("shopId"));
+  if (!shop.success) return context.json({ error: "Invalid shop" }, 400);
+  if (shop.data !== context.get("authorizedShopId")) {
+    return context.json({ error: "Shop access denied" }, 403);
+  }
+
+  const window = parseTimeWindow(context.req);
+  if ("error" in window) return context.json({ error: window.error }, 400);
+
+  const device = parseDevice(context.req.query("device") ?? undefined);
+  if (!device) return context.json({ error: "Invalid device" }, 400);
+
+  const mode = HeatmapModeSchema.safeParse(context.req.query("mode") ?? "click");
+  if (!mode.success) return context.json({ error: "Invalid mode" }, 400);
+
+  const sort = RouteSortSchema.safeParse(context.req.query("sort") ?? "most_active");
+  if (!sort.success) return context.json({ error: "Invalid sort" }, 400);
+
+  const rawLimit = Number(context.req.query("limit") ?? "24");
+  const limit = Number.isInteger(rawLimit) ? Math.min(Math.max(rawLimit, 1), 48) : 24;
+  const query = context.req.query("q") ?? "";
+
+  const sessions = await loadShopSessions(context.env.REPLAY_BUCKET, shop.data, {
+    limit: 100,
+  });
+  const index = buildRouteIndex({
+    sessions,
+    fromMs: window.fromMs,
+    toMs: window.toMs,
+    device,
+    mode: mode.data,
+    sort: sort.data,
+    limit,
+    query,
+  });
+  return context.json(index);
+});
+
+app.get("/v1/shops/:shopId/activity", async (context) => {
+  const shop = ShopIdSchema.safeParse(context.req.param("shopId"));
+  if (!shop.success) return context.json({ error: "Invalid shop" }, 400);
+  if (shop.data !== context.get("authorizedShopId")) {
+    return context.json({ error: "Shop access denied" }, 403);
+  }
+
+  const window = parseTimeWindow(context.req);
+  if ("error" in window) return context.json({ error: window.error }, 400);
+
+  const device = parseDevice(context.req.query("device") ?? undefined);
+  if (!device) return context.json({ error: "Invalid device" }, 400);
+
+  const mode = HeatmapModeSchema.safeParse(context.req.query("mode") ?? "click");
+  if (!mode.success) return context.json({ error: "Invalid mode" }, 400);
+
+  const route = context.req.query("route") ?? null;
+  if (route && route.length > 2_048) {
+    return context.json({ error: "Invalid route" }, 400);
+  }
+
+  const sessions = await loadShopSessions(context.env.REPLAY_BUCKET, shop.data, {
+    limit: 100,
+  });
+  return context.json(
+    buildActivityTimeline({
+      sessions,
+      fromMs: window.fromMs,
+      toMs: window.toMs,
+      device,
+      mode: mode.data,
+      route,
+    }),
+  );
 });
 
 app.get("/v1/shops/:shopId/sessions/:sessionId", async (context) => {
@@ -207,6 +350,35 @@ app.get("/v1/shops/:shopId/sessions/:sessionId", async (context) => {
   });
 });
 
+async function resolveSnapshotEvents(
+  objectStore: R2ReplayObjectStore,
+  shopId: string,
+  route: string,
+  device: "all" | "desktop" | "tablet" | "mobile",
+  sessions: SessionSummary[],
+) {
+  const candidates = sessions.filter(
+    (session) =>
+      session.hasFullSnapshot &&
+      (session.routes.includes(route) || session.entryRoute === route) &&
+      (device === "all" || session.device === device),
+  );
+
+  for (const candidate of candidates) {
+    try {
+      const batches = await objectStore.getBatches(shopId, candidate.sessionId);
+      const routeBatches = batches.filter((batch) => batch.route === route);
+      const snapshotEvents = extractSnapshotEvents(
+        routeBatches.length > 0 ? routeBatches : batches,
+      );
+      if (snapshotEvents) return snapshotEvents;
+    } catch {
+      // Skip unreadable sessions; never invent a page preview.
+    }
+  }
+  return null;
+}
+
 app.get("/v1/shops/:shopId/heatmaps", async (context) => {
   const shop = ShopIdSchema.safeParse(context.req.param("shopId"));
   if (!shop.success) return context.json({ error: "Invalid shop" }, 400);
@@ -219,44 +391,39 @@ app.get("/v1/shops/:shopId/heatmaps", async (context) => {
     return context.json({ error: "Route is required" }, 400);
   }
 
-  const deviceRaw = context.req.query("device") ?? "all";
-  const device =
-    deviceRaw === "all" ||
-    deviceRaw === "desktop" ||
-    deviceRaw === "tablet" ||
-    deviceRaw === "mobile"
-      ? deviceRaw
-      : null;
+  const device = parseDevice(context.req.query("device") ?? undefined);
   if (!device) return context.json({ error: "Invalid device" }, 400);
 
   const mode = HeatmapModeSchema.safeParse(context.req.query("mode") ?? "click");
   if (!mode.success) return context.json({ error: "Invalid mode" }, 400);
 
-  const objectStore = new R2ReplayObjectStore(context.env.REPLAY_BUCKET);
-  const sessions = (await objectStore.listSessionSummaries(shop.data, 100)).filter(
-    (session) => session.source !== "test",
-  );
+  const window = parseTimeWindow(context.req);
+  if ("error" in window) return context.json({ error: window.error }, 400);
 
-  let snapshotEvents = null as ReturnType<typeof extractSnapshotEvents>;
-  const candidates = sessions.filter(
-    (session) =>
-      session.hasFullSnapshot &&
-      (session.routes.includes(route) || session.entryRoute === route) &&
-      (device === "all" || session.device === device),
-  );
-
-  for (const candidate of candidates) {
-    try {
-      const batches = await objectStore.getBatches(shop.data, candidate.sessionId);
-      const routeBatches = batches.filter((batch) => batch.route === route);
-      snapshotEvents = extractSnapshotEvents(
-        routeBatches.length > 0 ? routeBatches : batches,
-      );
-      if (snapshotEvents) break;
-    } catch {
-      // Skip unreadable sessions; never invent a page preview.
+  // Optional scrub window inside the selected range (timeline focus).
+  const scrubFrom = context.req.query("scrubFrom");
+  const scrubTo = context.req.query("scrubTo");
+  let fromMs = window.fromMs;
+  let toMs = window.toMs;
+  if (scrubFrom || scrubTo) {
+    const scrubFromMs = scrubFrom ? Date.parse(scrubFrom) : window.fromMs;
+    const scrubToMs = scrubTo ? Date.parse(scrubTo) : window.toMs;
+    if (!Number.isFinite(scrubFromMs) || !Number.isFinite(scrubToMs)) {
+      return context.json({ error: "Invalid scrub range" }, 400);
     }
+    fromMs = Math.max(window.fromMs, scrubFromMs);
+    toMs = Math.min(window.toMs, scrubToMs);
   }
+
+  const includeSnapshot = context.req.query("snapshot") !== "0";
+  const objectStore = new R2ReplayObjectStore(context.env.REPLAY_BUCKET);
+  const sessions = await loadShopSessions(context.env.REPLAY_BUCKET, shop.data, {
+    limit: 100,
+  });
+
+  const snapshotEvents = includeSnapshot
+    ? await resolveSnapshotEvents(objectStore, shop.data, route, device, sessions)
+    : null;
 
   const heatmap = buildHeatmap({
     shopId: shop.data,
@@ -265,9 +432,61 @@ app.get("/v1/shops/:shopId/heatmaps", async (context) => {
     mode: mode.data,
     sessions,
     snapshotEvents,
+    fromMs,
+    toMs,
   });
 
   return context.json(heatmap);
+});
+
+/** Points-only heatmaps for site-map cards (no DOM snapshots). */
+app.get("/v1/shops/:shopId/heatmaps/batch", async (context) => {
+  const shop = ShopIdSchema.safeParse(context.req.param("shopId"));
+  if (!shop.success) return context.json({ error: "Invalid shop" }, 400);
+  if (shop.data !== context.get("authorizedShopId")) {
+    return context.json({ error: "Shop access denied" }, 403);
+  }
+
+  const routesRaw = context.req.query("routes") ?? "";
+  const routes = [
+    ...new Set(
+      routesRaw
+        .split("|")
+        .map((route) => route.trim())
+        .filter((route) => route.length > 0 && route.length <= 2_048),
+    ),
+  ].slice(0, 24);
+  if (routes.length === 0) {
+    return context.json({ error: "routes is required" }, 400);
+  }
+
+  const device = parseDevice(context.req.query("device") ?? undefined);
+  if (!device) return context.json({ error: "Invalid device" }, 400);
+
+  const mode = HeatmapModeSchema.safeParse(context.req.query("mode") ?? "click");
+  if (!mode.success) return context.json({ error: "Invalid mode" }, 400);
+
+  const window = parseTimeWindow(context.req);
+  if ("error" in window) return context.json({ error: window.error }, 400);
+
+  const sessions = await loadShopSessions(context.env.REPLAY_BUCKET, shop.data, {
+    limit: 100,
+  });
+
+  const heatmaps = routes.map((route) =>
+    buildHeatmap({
+      shopId: shop.data,
+      route,
+      device,
+      mode: mode.data,
+      sessions,
+      snapshotEvents: null,
+      fromMs: window.fromMs,
+      toMs: window.toMs,
+    }),
+  );
+
+  return context.json({ heatmaps });
 });
 
 app.notFound(() => new Response("Not found", { status: 404 }));

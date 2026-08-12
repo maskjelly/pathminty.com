@@ -1,14 +1,314 @@
 import type {
+  ActivityBucket,
+  ActivityTimelineResponse,
   HeatmapClick,
   HeatmapHover,
   HeatmapMode,
   HeatmapPoint,
   HeatmapResponse,
   ReplayBatch,
+  RouteListResponse,
+  RouteSort,
+  RouteStat,
   RrwebEvent,
   SessionSummary,
+  TimeRangePreset,
 } from "@pathminty/contracts";
 import { SESSION_IDLE_TIMEOUT_MS } from "@pathminty/contracts";
+
+export type TimeWindow = Readonly<{ fromMs: number; toMs: number }>;
+
+const HOVER_SAMPLE_MS = 250;
+
+const PRESET_MS: Record<TimeRangePreset, number> = {
+  "1h": 60 * 60 * 1_000,
+  "24h": 24 * 60 * 60 * 1_000,
+  "7d": 7 * 24 * 60 * 60 * 1_000,
+  "30d": 30 * 24 * 60 * 60 * 1_000,
+};
+
+/** Least-active rank ignores sparse routes so one-off SKU hits do not win. */
+export const LEAST_ACTIVE_MIN_SESSIONS = 3;
+
+export function resolveTimePreset(
+  preset: TimeRangePreset,
+  nowMs: number = Date.now(),
+): TimeWindow {
+  const span = PRESET_MS[preset];
+  return { fromMs: nowMs - span, toMs: nowMs };
+}
+
+export function sessionOverlapsRange(
+  session: SessionSummary,
+  fromMs: number,
+  toMs: number,
+): boolean {
+  const started = Date.parse(session.startedAt);
+  const lastSeen = Date.parse(session.lastSeenAt);
+  if (!Number.isFinite(started) || !Number.isFinite(lastSeen)) return false;
+  return lastSeen >= fromMs && started <= toMs;
+}
+
+export function filterSessionsInRange(
+  sessions: readonly SessionSummary[],
+  options: {
+    fromMs: number;
+    toMs: number;
+    device?: HeatmapResponse["device"];
+    includeTest?: boolean;
+  },
+): SessionSummary[] {
+  return sessions.filter((session) => {
+    if (!options.includeTest && session.source === "test") return false;
+    if (
+      options.device &&
+      options.device !== "all" &&
+      session.device !== options.device
+    ) {
+      return false;
+    }
+    return sessionOverlapsRange(session, options.fromMs, options.toMs);
+  });
+}
+
+function eventInRange(at: number, fromMs: number, toMs: number): boolean {
+  return Number.isFinite(at) && at >= fromMs && at <= toMs;
+}
+
+function routeEventWeight(
+  session: SessionSummary,
+  route: string,
+  mode: HeatmapMode,
+  fromMs: number,
+  toMs: number,
+): { clicks: number; hoverWeight: number; events: number } {
+  let clicks = 0;
+  let hoverWeight = 0;
+  if (mode === "click" || mode === "hover") {
+    for (const click of session.clicks) {
+      if (click.route !== route) continue;
+      if (!eventInRange(click.at, fromMs, toMs)) continue;
+      clicks += 1;
+    }
+    for (const hover of session.hovers) {
+      if (hover.route !== route) continue;
+      if (!eventInRange(hover.at, fromMs, toMs)) continue;
+      hoverWeight += Math.max(1, Math.round(hover.dwellMs / HOVER_SAMPLE_MS));
+    }
+  }
+  const events = mode === "hover" ? hoverWeight : clicks;
+  return { clicks, hoverWeight, events };
+}
+
+export function buildRouteIndex(input: {
+  sessions: readonly SessionSummary[];
+  fromMs: number;
+  toMs: number;
+  device?: HeatmapResponse["device"];
+  mode?: HeatmapMode;
+  sort?: RouteSort;
+  limit?: number;
+  query?: string;
+}): RouteListResponse {
+  const mode = input.mode ?? "click";
+  const sort = input.sort ?? "most_active";
+  const limit = Math.min(Math.max(input.limit ?? 24, 1), 200);
+  const query = input.query?.trim().toLowerCase() ?? "";
+  const sessions = filterSessionsInRange(input.sessions, {
+    fromMs: input.fromMs,
+    toMs: input.toMs,
+    device: input.device ?? "all",
+  });
+
+  const byRoute = new Map<
+    string,
+    {
+      sessionIds: Set<string>;
+      clickCount: number;
+      hoverWeight: number;
+      eventCount: number;
+      lastSeenMs: number;
+      hasFullSnapshot: boolean;
+    }
+  >();
+
+  for (const session of sessions) {
+    const lastSeenMs = Date.parse(session.lastSeenAt);
+    for (const route of new Set([session.entryRoute, ...session.routes])) {
+      if (query && !route.toLowerCase().includes(query)) continue;
+      const weights = routeEventWeight(
+        session,
+        route,
+        mode,
+        input.fromMs,
+        input.toMs,
+      );
+      // Include routes visited even without interactions so site map is complete.
+      const existing = byRoute.get(route) ?? {
+        sessionIds: new Set<string>(),
+        clickCount: 0,
+        hoverWeight: 0,
+        eventCount: 0,
+        lastSeenMs: 0,
+        hasFullSnapshot: false,
+      };
+      existing.sessionIds.add(session.sessionId);
+      existing.clickCount += weights.clicks;
+      existing.hoverWeight += weights.hoverWeight;
+      existing.eventCount += weights.events;
+      if (Number.isFinite(lastSeenMs)) {
+        existing.lastSeenMs = Math.max(existing.lastSeenMs, lastSeenMs);
+      }
+      if (session.hasFullSnapshot) existing.hasFullSnapshot = true;
+      byRoute.set(route, existing);
+    }
+  }
+
+  const stats: RouteStat[] = [...byRoute.entries()].map(([route, value]) => ({
+    route,
+    sessionCount: value.sessionIds.size,
+    eventCount: value.eventCount,
+    clickCount: value.clickCount,
+    hoverWeight: value.hoverWeight,
+    lastSeenAt: new Date(value.lastSeenMs || input.toMs).toISOString(),
+    hasFullSnapshot: value.hasFullSnapshot,
+  }));
+
+  const byMostActive = [...stats].sort((left, right) => {
+    if (right.eventCount !== left.eventCount) {
+      return right.eventCount - left.eventCount;
+    }
+    if (right.sessionCount !== left.sessionCount) {
+      return right.sessionCount - left.sessionCount;
+    }
+    return left.route.localeCompare(right.route);
+  });
+
+  const mostActive = byMostActive[0] ?? null;
+  const leastActiveCandidates = byMostActive
+    .filter((route) => route.sessionCount >= LEAST_ACTIVE_MIN_SESSIONS)
+    .sort((left, right) => {
+      if (left.eventCount !== right.eventCount) {
+        return left.eventCount - right.eventCount;
+      }
+      return left.route.localeCompare(right.route);
+    });
+  const leastActive = leastActiveCandidates[0] ?? null;
+
+  const sorted = [...stats].sort((left, right) => {
+    switch (sort) {
+      case "least_active":
+        return left.eventCount - right.eventCount || left.route.localeCompare(right.route);
+      case "sessions":
+        return (
+          right.sessionCount - left.sessionCount ||
+          right.eventCount - left.eventCount ||
+          left.route.localeCompare(right.route)
+        );
+      case "alpha":
+        return left.route.localeCompare(right.route);
+      case "most_active":
+      default:
+        return (
+          right.eventCount - left.eventCount ||
+          right.sessionCount - left.sessionCount ||
+          left.route.localeCompare(right.route)
+        );
+    }
+  });
+
+  const totalEvents = stats.reduce((sum, route) => sum + route.eventCount, 0);
+  return {
+    routes: sorted.slice(0, limit),
+    mostActive,
+    leastActive,
+    totalSessions: sessions.length,
+    totalEvents,
+    totalRoutes: stats.length,
+    from: new Date(input.fromMs).toISOString(),
+    to: new Date(input.toMs).toISOString(),
+  };
+}
+
+export function buildActivityTimeline(input: {
+  sessions: readonly SessionSummary[];
+  fromMs: number;
+  toMs: number;
+  device?: HeatmapResponse["device"];
+  route?: string | null;
+  mode?: HeatmapMode;
+  bucketCount?: number;
+}): ActivityTimelineResponse {
+  const mode = input.mode ?? "click";
+  const device = input.device ?? "all";
+  const route = input.route ?? null;
+  const span = Math.max(1, input.toMs - input.fromMs);
+  // Prefer ~24 buckets for 24h (hourly); cap for other presets.
+  const bucketCount = Math.min(
+    Math.max(input.bucketCount ?? (span <= 25 * 60 * 60 * 1_000 ? 24 : 28), 4),
+    96,
+  );
+  const bucketMs = span / bucketCount;
+  const sessions = filterSessionsInRange(input.sessions, {
+    fromMs: input.fromMs,
+    toMs: input.toMs,
+    device,
+  });
+
+  const buckets: ActivityBucket[] = Array.from({ length: bucketCount }, (_, index) => {
+    const startMs = input.fromMs + index * bucketMs;
+    const endMs = index === bucketCount - 1 ? input.toMs : startMs + bucketMs;
+    return {
+      startAt: new Date(startMs).toISOString(),
+      endAt: new Date(endMs).toISOString(),
+      eventCount: 0,
+      sessionCount: 0,
+    };
+  });
+
+  const sessionSeen = buckets.map(() => new Set<string>());
+
+  for (const session of sessions) {
+    const events =
+      mode === "hover"
+        ? session.hovers.map((hover) => ({
+            at: hover.at,
+            route: hover.route,
+            weight: Math.max(1, Math.round(hover.dwellMs / HOVER_SAMPLE_MS)),
+          }))
+        : session.clicks.map((click) => ({
+            at: click.at,
+            route: click.route,
+            weight: 1,
+          }));
+
+    for (const event of events) {
+      if (route && event.route !== route) continue;
+      if (!eventInRange(event.at, input.fromMs, input.toMs)) continue;
+      const index = Math.min(
+        bucketCount - 1,
+        Math.max(0, Math.floor((event.at - input.fromMs) / bucketMs)),
+      );
+      const bucket = buckets[index];
+      const seen = sessionSeen[index];
+      if (!bucket || !seen) continue;
+      bucket.eventCount += event.weight;
+      if (!seen.has(session.sessionId)) {
+        seen.add(session.sessionId);
+        bucket.sessionCount += 1;
+      }
+    }
+  }
+
+  return {
+    buckets,
+    from: new Date(input.fromMs).toISOString(),
+    to: new Date(input.toMs).toISOString(),
+    route,
+    device,
+    mode,
+  };
+}
 
 export type RevenueComponents = Readonly<{
   grossMerchandiseValueMinor: bigint;
@@ -61,7 +361,6 @@ const RRWEB = {
   TouchStart: 7,
 } as const;
 
-const HOVER_SAMPLE_MS = 250;
 const MAX_HOVERS_PER_SESSION = 400;
 const MAX_CLICKS = 2_000;
 
@@ -528,10 +827,23 @@ export function buildHeatmap(input: {
   mode: HeatmapMode;
   sessions: readonly SessionSummary[];
   snapshotEvents: RrwebEvent[] | null;
+  /** Inclusive event time window (epoch ms). Omit for all events on matching sessions. */
+  fromMs?: number;
+  toMs?: number;
 }): HeatmapResponse {
+  const fromMs = input.fromMs ?? Number.NEGATIVE_INFINITY;
+  const toMs = input.toMs ?? Number.POSITIVE_INFINITY;
+
   const routeFiltered = input.sessions.filter((session) => {
     if (session.source === "test") return false;
     if (input.device !== "all" && session.device !== input.device) return false;
+    if (
+      Number.isFinite(fromMs) &&
+      Number.isFinite(toMs) &&
+      !sessionOverlapsRange(session, fromMs, toMs)
+    ) {
+      return false;
+    }
     return session.routes.includes(input.route) || session.entryRoute === input.route;
   });
 
@@ -540,11 +852,13 @@ export function buildHeatmap(input: {
     if (input.mode === "click") {
       for (const click of session.clicks) {
         if (click.route !== input.route) continue;
+        if (!eventInRange(click.at, fromMs, toMs)) continue;
         rawPoints.push({ x: click.x, y: click.y, weight: 1 });
       }
     } else {
       for (const hover of session.hovers) {
         if (hover.route !== input.route) continue;
+        if (!eventInRange(hover.at, fromMs, toMs)) continue;
         rawPoints.push({
           x: hover.x,
           y: hover.y,

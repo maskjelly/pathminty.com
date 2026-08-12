@@ -218,6 +218,8 @@ export type SessionSummary = z.infer<typeof SessionSummarySchema>;
 export const SessionListResponseSchema = z
   .object({
     sessions: z.array(SessionSummarySchema),
+    from: z.string().datetime({ offset: true }).optional(),
+    to: z.string().datetime({ offset: true }).optional(),
   })
   .strict();
 
@@ -266,6 +268,79 @@ export const HeatmapResponseSchema = z
   .strict();
 
 export type HeatmapResponse = z.infer<typeof HeatmapResponseSchema>;
+
+/** Dashboard time window presets (merchant heatmaps + site map). */
+export const TimeRangePresetSchema = z.enum(["1h", "24h", "7d", "30d"]);
+export type TimeRangePreset = z.infer<typeof TimeRangePresetSchema>;
+
+export const RouteSortSchema = z.enum([
+  "most_active",
+  "least_active",
+  "sessions",
+  "alpha",
+]);
+export type RouteSort = z.infer<typeof RouteSortSchema>;
+
+export const RouteStatSchema = z
+  .object({
+    route: z.string().min(1).max(2_048),
+    sessionCount: numberAsNonNegInt(),
+    eventCount: numberAsNonNegInt(),
+    clickCount: numberAsNonNegInt(),
+    hoverWeight: numberAsNonNegInt(),
+    lastSeenAt: z.string().datetime({ offset: true }),
+    hasFullSnapshot: z.boolean(),
+  })
+  .strict();
+
+export type RouteStat = z.infer<typeof RouteStatSchema>;
+
+export const RouteListResponseSchema = z
+  .object({
+    routes: z.array(RouteStatSchema).max(200),
+    mostActive: RouteStatSchema.nullable(),
+    leastActive: RouteStatSchema.nullable(),
+    totalSessions: numberAsNonNegInt(),
+    totalEvents: numberAsNonNegInt(),
+    totalRoutes: numberAsNonNegInt(),
+    from: z.string().datetime({ offset: true }),
+    to: z.string().datetime({ offset: true }),
+  })
+  .strict();
+
+export type RouteListResponse = z.infer<typeof RouteListResponseSchema>;
+
+export const ActivityBucketSchema = z
+  .object({
+    startAt: z.string().datetime({ offset: true }),
+    endAt: z.string().datetime({ offset: true }),
+    eventCount: numberAsNonNegInt(),
+    sessionCount: numberAsNonNegInt(),
+  })
+  .strict();
+
+export type ActivityBucket = z.infer<typeof ActivityBucketSchema>;
+
+export const ActivityTimelineResponseSchema = z
+  .object({
+    buckets: z.array(ActivityBucketSchema).max(200),
+    from: z.string().datetime({ offset: true }),
+    to: z.string().datetime({ offset: true }),
+    route: z.string().min(1).max(2_048).nullable(),
+    device: z.enum(["all", "desktop", "tablet", "mobile"]),
+    mode: HeatmapModeSchema,
+  })
+  .strict();
+
+export type ActivityTimelineResponse = z.infer<typeof ActivityTimelineResponseSchema>;
+
+export const HeatmapBatchResponseSchema = z
+  .object({
+    heatmaps: z.array(HeatmapResponseSchema).max(48),
+  })
+  .strict();
+
+export type HeatmapBatchResponse = z.infer<typeof HeatmapBatchResponseSchema>;
 
 function numberAsNonNegInt() {
   return z.number().int().nonnegative();

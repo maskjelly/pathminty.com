@@ -1,16 +1,19 @@
-import type { ReplayBatch, RrwebEvent } from "@pathminty/contracts";
+import type { ReplayBatch, RrwebEvent, SessionSummary } from "@pathminty/contracts";
 import { SESSION_IDLE_TIMEOUT_MS } from "@pathminty/contracts";
 import { describe, expect, it } from "vitest";
 
 import {
   assessReplayReconstruction,
+  buildActivityTimeline,
   buildHeatmap,
+  buildRouteIndex,
   calculateNetRevenueMinor,
   computeScrollDepth,
   normalizeClientToDocument,
   normalizeStorefrontRoute,
   orderReplayEvents,
   resolveSessionStatus,
+  resolveTimePreset,
   summarizeReplayBatches,
 } from "../src/index";
 
@@ -538,5 +541,105 @@ describe("buildHeatmap", () => {
     expect(heatmap.status).toBe("interactions_without_snapshot");
     expect(heatmap.points.length).toBeGreaterThan(0);
     expect(heatmap.document).toEqual({ width: 390, height: 2_400 });
+  });
+});
+
+describe("time range and route index", () => {
+  const now = Date.parse("2026-08-12T12:00:00.000Z");
+
+  function summaryWith(
+    overrides: Partial<ReturnType<typeof summarizeReplayBatches>> & {
+      clicks?: SessionSummary["clicks"];
+      routes?: string[];
+      entryRoute?: string;
+    },
+  ): SessionSummary {
+    const base = summarizeReplayBatches([rrwebBatch({ sequence: 0 })], {
+      isFinal: true,
+    });
+    return { ...base, ...overrides } as SessionSummary;
+  }
+
+  it("resolveTimePreset spans the expected window", () => {
+    const window = resolveTimePreset("24h", now);
+    expect(window.toMs).toBe(now);
+    expect(window.fromMs).toBe(now - 24 * 60 * 60 * 1_000);
+  });
+
+  it("ranks most and least active routes with session floor", () => {
+    const busy = summaryWith({
+      sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      routes: ["/hot"],
+      entryRoute: "/hot",
+      clicks: [
+        { at: now - 1_000, route: "/hot", x: 0.2, y: 0.2 },
+        { at: now - 2_000, route: "/hot", x: 0.3, y: 0.3 },
+        { at: now - 3_000, route: "/hot", x: 0.4, y: 0.4 },
+        { at: now - 4_000, route: "/hot", x: 0.5, y: 0.5 },
+        { at: now - 5_000, route: "/hot", x: 0.6, y: 0.6 },
+        { at: now - 6_000, route: "/hot", x: 0.7, y: 0.7 },
+      ],
+      startedAt: new Date(now - 10_000).toISOString(),
+      lastSeenAt: new Date(now - 1_000).toISOString(),
+      endedAt: new Date(now - 1_000).toISOString(),
+    });
+    const quietSessions = [0, 1, 2].map((index) =>
+      summaryWith({
+        sessionId: `bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbb${index}`,
+        visitorId: `visitor_quiet_${index}`,
+        routes: ["/quiet"],
+        entryRoute: "/quiet",
+        clicks: [{ at: now - 5_000, route: "/quiet", x: 0.5, y: 0.5 }],
+        startedAt: new Date(now - 20_000).toISOString(),
+        lastSeenAt: new Date(now - 4_000).toISOString(),
+        endedAt: new Date(now - 4_000).toISOString(),
+      }),
+    );
+    const sparse = summaryWith({
+      sessionId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
+      routes: ["/once"],
+      entryRoute: "/once",
+      clicks: [],
+      startedAt: new Date(now - 8_000).toISOString(),
+      lastSeenAt: new Date(now - 2_000).toISOString(),
+      endedAt: new Date(now - 2_000).toISOString(),
+    });
+
+    const index = buildRouteIndex({
+      sessions: [busy, ...quietSessions, sparse],
+      fromMs: now - 60_000,
+      toMs: now,
+      mode: "click",
+      sort: "most_active",
+      limit: 10,
+    });
+
+    expect(index.mostActive?.route).toBe("/hot");
+    expect(index.leastActive?.route).toBe("/quiet");
+    expect(index.totalRoutes).toBe(3);
+    expect(index.routes[0]?.route).toBe("/hot");
+  });
+
+  it("buildActivityTimeline buckets events", () => {
+    const session = summaryWith({
+      routes: ["/"],
+      entryRoute: "/",
+      clicks: [
+        { at: now - 2 * 60 * 60 * 1_000, route: "/", x: 0.1, y: 0.1 },
+        { at: now - 30 * 60 * 1_000, route: "/", x: 0.2, y: 0.2 },
+      ],
+      startedAt: new Date(now - 3 * 60 * 60 * 1_000).toISOString(),
+      lastSeenAt: new Date(now - 10_000).toISOString(),
+      endedAt: new Date(now - 10_000).toISOString(),
+    });
+    const timeline = buildActivityTimeline({
+      sessions: [session],
+      fromMs: now - 24 * 60 * 60 * 1_000,
+      toMs: now,
+      mode: "click",
+      bucketCount: 24,
+    });
+    expect(timeline.buckets).toHaveLength(24);
+    expect(timeline.buckets.reduce((sum, b) => sum + b.eventCount, 0)).toBe(2);
   });
 });

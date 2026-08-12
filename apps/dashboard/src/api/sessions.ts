@@ -1,17 +1,32 @@
 import {
+  ActivityTimelineResponseSchema,
+  HeatmapBatchResponseSchema,
   HeatmapResponseSchema,
   ReplaySessionResponseSchema,
+  RouteListResponseSchema,
   SessionListResponseSchema,
   ShopIdSchema,
+  type ActivityTimelineResponse,
   type HeatmapMode,
   type HeatmapResponse,
   type ReplaySessionResponse,
+  type RouteListResponse,
+  type RouteSort,
   type SessionSummary,
+  type TimeRangePreset,
 } from "@pathminty/contracts";
 
 const apiBaseUrl =
   import.meta.env.VITE_API_BASE_URL?.replace(/\/$/u, "") ??
   (import.meta.env.DEV ? "http://localhost:8787" : "");
+
+export type DashboardDevice = "all" | "desktop" | "tablet" | "mobile";
+
+export type TimeQuery = {
+  preset: TimeRangePreset;
+  from?: string;
+  to?: string;
+};
 
 async function apiRequest(path: string, init?: RequestInit) {
   return fetch(`${apiBaseUrl}${path}`, {
@@ -34,6 +49,13 @@ function parseShopIdResponse(body: unknown) {
   return shopId.data;
 }
 
+function timeSearchParams(time: TimeQuery): URLSearchParams {
+  const query = new URLSearchParams({ preset: time.preset });
+  if (time.from) query.set("from", time.from);
+  if (time.to) query.set("to", time.to);
+  return query;
+}
+
 const ticketExchanges = new Map<string, Promise<string>>();
 
 async function exchangeDashboardTicketOnce(ticket: string): Promise<string> {
@@ -48,7 +70,6 @@ async function exchangeDashboardTicketOnce(ticket: string): Promise<string> {
     if (response.ok) {
       return parseShopIdResponse(await response.json());
     }
-    // 401: missing/consumed ticket (or not yet visible). Retry those only.
     if (response.status !== 401 || attempt === 2) break;
     await new Promise((resolve) => setTimeout(resolve, 200 * (attempt + 1)));
   }
@@ -80,12 +101,66 @@ export async function getDashboardShop(): Promise<string | null> {
 }
 
 /** Live merchant UI never requests test sessions. */
-export async function getSessions(shopId: string): Promise<SessionSummary[]> {
+export async function getSessions(
+  shopId: string,
+  options: {
+    time: TimeQuery;
+    device?: DashboardDevice;
+    limit?: number;
+  },
+): Promise<SessionSummary[]> {
+  const query = timeSearchParams(options.time);
+  query.set("limit", String(options.limit ?? 100));
+  if (options.device) query.set("device", options.device);
   const response = await apiRequest(
-    `/v1/shops/${encodeURIComponent(shopId)}/sessions?limit=100`,
+    `/v1/shops/${encodeURIComponent(shopId)}/sessions?${query.toString()}`,
   );
   if (!response.ok) throw new Error("Unable to load storefront sessions.");
   return SessionListResponseSchema.parse(await response.json()).sessions;
+}
+
+export async function getRoutes(
+  shopId: string,
+  options: {
+    time: TimeQuery;
+    device: DashboardDevice;
+    mode: HeatmapMode;
+    sort: RouteSort;
+    limit: number;
+    query?: string;
+  },
+): Promise<RouteListResponse> {
+  const params = timeSearchParams(options.time);
+  params.set("device", options.device);
+  params.set("mode", options.mode);
+  params.set("sort", options.sort);
+  params.set("limit", String(options.limit));
+  if (options.query) params.set("q", options.query);
+  const response = await apiRequest(
+    `/v1/shops/${encodeURIComponent(shopId)}/routes?${params.toString()}`,
+  );
+  if (!response.ok) throw new Error("Unable to load route map.");
+  return RouteListResponseSchema.parse(await response.json());
+}
+
+export async function getActivity(
+  shopId: string,
+  options: {
+    time: TimeQuery;
+    device: DashboardDevice;
+    mode: HeatmapMode;
+    route?: string | null;
+  },
+): Promise<ActivityTimelineResponse> {
+  const params = timeSearchParams(options.time);
+  params.set("device", options.device);
+  params.set("mode", options.mode);
+  if (options.route) params.set("route", options.route);
+  const response = await apiRequest(
+    `/v1/shops/${encodeURIComponent(shopId)}/activity?${params.toString()}`,
+  );
+  if (!response.ok) throw new Error("Unable to load activity timeline.");
+  return ActivityTimelineResponseSchema.parse(await response.json());
 }
 
 export async function getReplay(
@@ -103,18 +178,45 @@ export async function getHeatmap(
   shopId: string,
   params: {
     route: string;
-    device: "all" | "desktop" | "tablet" | "mobile";
+    device: DashboardDevice;
     mode: HeatmapMode;
+    time: TimeQuery;
+    scrubFrom?: string;
+    scrubTo?: string;
+    snapshot?: boolean;
   },
 ): Promise<HeatmapResponse> {
-  const query = new URLSearchParams({
-    route: params.route,
-    device: params.device,
-    mode: params.mode,
-  });
+  const query = timeSearchParams(params.time);
+  query.set("route", params.route);
+  query.set("device", params.device);
+  query.set("mode", params.mode);
+  if (params.scrubFrom) query.set("scrubFrom", params.scrubFrom);
+  if (params.scrubTo) query.set("scrubTo", params.scrubTo);
+  if (params.snapshot === false) query.set("snapshot", "0");
   const response = await apiRequest(
     `/v1/shops/${encodeURIComponent(shopId)}/heatmaps?${query.toString()}`,
   );
   if (!response.ok) throw new Error("Unable to load heatmap.");
   return HeatmapResponseSchema.parse(await response.json());
+}
+
+export async function getHeatmapBatch(
+  shopId: string,
+  params: {
+    routes: string[];
+    device: DashboardDevice;
+    mode: HeatmapMode;
+    time: TimeQuery;
+  },
+): Promise<HeatmapResponse[]> {
+  if (params.routes.length === 0) return [];
+  const query = timeSearchParams(params.time);
+  query.set("routes", params.routes.join("|"));
+  query.set("device", params.device);
+  query.set("mode", params.mode);
+  const response = await apiRequest(
+    `/v1/shops/${encodeURIComponent(shopId)}/heatmaps/batch?${query.toString()}`,
+  );
+  if (!response.ok) throw new Error("Unable to load site map heatmaps.");
+  return HeatmapBatchResponseSchema.parse(await response.json()).heatmaps;
 }

@@ -1,5 +1,6 @@
 import {
   ArrowClockwise,
+  ArrowLeft,
   CursorClick,
   DeviceMobile,
   DeviceTablet,
@@ -10,21 +11,32 @@ import {
   Storefront,
 } from "@phosphor-icons/react";
 import type {
+  ActivityTimelineResponse,
   HeatmapMode,
   HeatmapResponse,
   ReplaySessionResponse,
+  RouteListResponse,
+  RouteSort,
   SessionSummary,
+  TimeRangePreset,
 } from "@pathminty/contracts";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import {
   exchangeDashboardTicket,
+  getActivity,
   getDashboardShop,
   getHeatmap,
+  getHeatmapBatch,
   getReplay,
+  getRoutes,
   getSessions,
+  type DashboardDevice,
+  type TimeQuery,
 } from "./api/sessions";
+import { ActivityTimeline } from "./components/ActivityTimeline";
 import { HeatmapSurface } from "./components/HeatmapSurface";
+import { MiniHeatmap } from "./components/MiniHeatmap";
 import { ReplayViewer } from "./components/ReplayViewer";
 
 type View = "Heatmaps" | "Recordings";
@@ -34,7 +46,15 @@ const views: Array<{ label: View; icon: typeof MapTrifold }> = [
   { label: "Recordings", icon: Record },
 ];
 
+const TIME_PRESETS: Array<{ id: TimeRangePreset; label: string }> = [
+  { id: "1h", label: "1h" },
+  { id: "24h", label: "24h" },
+  { id: "7d", label: "7d" },
+  { id: "30d", label: "30d" },
+];
+
 const POLL_MS = 15_000;
+const SITE_MAP_PAGE = 24;
 
 function durationLabel(durationMs: number) {
   const seconds = Math.max(0, Math.round(durationMs / 1_000));
@@ -121,32 +141,114 @@ export function LiveDashboard() {
   const [error, setError] = useState("");
   const [shopId, setShopId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
-  const [route, setRoute] = useState<string>("");
-  const [device, setDevice] = useState<"all" | SessionSummary["device"]>("all");
+  const [routeIndex, setRouteIndex] = useState<RouteListResponse | null>(null);
+  const [activity, setActivity] = useState<ActivityTimelineResponse | null>(null);
+  const [miniHeatmaps, setMiniHeatmaps] = useState<Record<string, HeatmapResponse>>(
+    {},
+  );
+  const [device, setDevice] = useState<DashboardDevice>("all");
   const [heatmapMode, setHeatmapMode] = useState<HeatmapMode>("click");
+  const [timePreset, setTimePreset] = useState<TimeRangePreset>("24h");
+  const [routeSort, setRouteSort] = useState<RouteSort>("most_active");
+  const [routeQuery, setRouteQuery] = useState("");
+  const [routeLimit, setRouteLimit] = useState(SITE_MAP_PAGE);
+  const [selectedRoute, setSelectedRoute] = useState<string | null>(null);
+  const [scrubIndex, setScrubIndex] = useState<number | null>(null);
   const [heatmap, setHeatmap] = useState<HeatmapResponse | null>(null);
   const [heatmapLoading, setHeatmapLoading] = useState(false);
+  const [mapLoading, setMapLoading] = useState(false);
   const [replay, setReplay] = useState<ReplaySessionResponse | null>(null);
   const [replayOpen, setReplayOpen] = useState(false);
   const [replayLoading, setReplayLoading] = useState(false);
 
-  const loadSessions = useCallback(async (shop: string) => {
-    const result = await getSessions(shop);
-    setSessions(result);
-    setError("");
-    return result;
-  }, []);
+  const timeQuery = useMemo<TimeQuery>(() => ({ preset: timePreset }), [timePreset]);
 
+  const loadSessions = useCallback(
+    async (shop: string) => {
+      const result = await getSessions(shop, { time: timeQuery, device, limit: 100 });
+      setSessions(result);
+      setError("");
+      return result;
+    },
+    [timeQuery, device],
+  );
+
+  const loadSiteMap = useCallback(
+    async (shop: string) => {
+      setMapLoading(true);
+      try {
+        const routeOptions = {
+          time: timeQuery,
+          device,
+          mode: heatmapMode,
+          sort: routeSort,
+          limit: routeLimit,
+          ...(routeQuery.trim() ? { query: routeQuery.trim() } : {}),
+        };
+        const [routes, timeline] = await Promise.all([
+          getRoutes(shop, routeOptions),
+          getActivity(shop, {
+            time: timeQuery,
+            device,
+            mode: heatmapMode,
+          }),
+        ]);
+        setRouteIndex(routes);
+        setActivity(timeline);
+
+        const paths = routes.routes.map((item) => item.route);
+        if (paths.length > 0) {
+          const batch = await getHeatmapBatch(shop, {
+            routes: paths,
+            device,
+            mode: heatmapMode,
+            time: timeQuery,
+          });
+          const next: Record<string, HeatmapResponse> = {};
+          for (const item of batch) next[item.route] = item;
+          setMiniHeatmaps(next);
+        } else {
+          setMiniHeatmaps({});
+        }
+        setError("");
+      } catch (caught) {
+        setError(
+          caught instanceof Error ? caught.message : "Unable to load site map.",
+        );
+      } finally {
+        setMapLoading(false);
+      }
+    },
+    [timeQuery, device, heatmapMode, routeSort, routeLimit, routeQuery],
+  );
+
+  // Route-scoped timeline while drilling into a page heatmap.
+  useEffect(() => {
+    if (!shopId || view !== "Heatmaps" || !selectedRoute) return;
+    let cancelled = false;
+    void getActivity(shopId, {
+      time: timeQuery,
+      device,
+      mode: heatmapMode,
+      route: selectedRoute,
+    })
+      .then((timeline) => {
+        if (!cancelled) setActivity(timeline);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [shopId, view, selectedRoute, timeQuery, device, heatmapMode]);
+
+  // Auth bootstrap once.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
         const search = new URLSearchParams(window.location.search);
         const fragment = new URLSearchParams(window.location.hash.slice(1));
-        // Prefer query (redirect-safe); keep hash for any older handoff links.
         const ticket = search.get("ticket") ?? fragment.get("ticket");
-        // Drop the one-time ticket from the URL before exchange so a refresh
-        // cannot re-submit a consumed token.
         if (ticket) history.replaceState(null, "", window.location.pathname);
 
         let shop: string | null = null;
@@ -154,7 +256,6 @@ export function LiveDashboard() {
           try {
             shop = await exchangeDashboardTicket(ticket);
           } catch (exchangeError) {
-            // Concurrent exchange or refresh after success may leave a session cookie.
             shop = await getDashboardShop();
             if (!shop) {
               throw exchangeError instanceof Error
@@ -168,10 +269,8 @@ export function LiveDashboard() {
           shop = await getDashboardShop();
         }
         if (!shop) throw new Error("Open PathMinty from your Shopify Admin.");
-        const result = await getSessions(shop);
         if (cancelled) return;
         setShopId(shop);
-        setSessions(result);
         setStatus("ready");
       } catch (caught) {
         if (cancelled) return;
@@ -186,43 +285,61 @@ export function LiveDashboard() {
     };
   }, []);
 
-  // Poll for live session appearance while the dashboard is open.
+  // Initial + filter-driven loads for heatmaps site map (no auto-poll).
   useEffect(() => {
-    if (!shopId) return;
-    const timer = window.setInterval(() => {
+    if (!shopId || view !== "Heatmaps") return;
+    void loadSiteMap(shopId);
+  }, [shopId, view, loadSiteMap]);
+
+  // Sessions for recordings tab (and manual refresh).
+  useEffect(() => {
+    if (!shopId || view !== "Recordings") return;
+    void loadSessions(shopId).catch((caught: unknown) => {
+      setError(
+        caught instanceof Error ? caught.message : "Unable to load sessions.",
+      );
+    });
+  }, [shopId, view, loadSessions]);
+
+  // Live poll only on Recordings while the tab is visible.
+  useEffect(() => {
+    if (!shopId || view !== "Recordings") return;
+    const tick = () => {
+      if (document.visibilityState !== "visible") return;
       void loadSessions(shopId).catch(() => undefined);
-    }, POLL_MS);
-    return () => window.clearInterval(timer);
-  }, [shopId, loadSessions]);
+    };
+    const timer = window.setInterval(tick, POLL_MS);
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") tick();
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [shopId, view, loadSessions]);
 
-  const routes = useMemo(
-    () => [...new Set(sessions.flatMap((session) => session.routes))].sort(),
-    [sessions],
-  );
-
+  // Drill-in full heatmap — depends on route + scrub, not session list refreshes.
   useEffect(() => {
-    if (routes.length === 0) {
-      setRoute("");
-      return;
-    }
-    if (!route || !routes.includes(route)) {
-      setRoute(routes[0] ?? "");
-    }
-  }, [routes, route]);
-
-  useEffect(() => {
-    if (!shopId || !route) {
+    if (!shopId || !selectedRoute || view !== "Heatmaps") {
       setHeatmap(null);
       return;
     }
     let cancelled = false;
     setHeatmapLoading(true);
+    const scrubBucket =
+      scrubIndex !== null && activity ? activity.buckets[scrubIndex] : null;
     void (async () => {
       try {
         const result = await getHeatmap(shopId, {
-          route,
+          route: selectedRoute,
           device,
           mode: heatmapMode,
+          time: timeQuery,
+          snapshot: true,
+          ...(scrubBucket
+            ? { scrubFrom: scrubBucket.startAt, scrubTo: scrubBucket.endAt }
+            : {}),
         });
         if (!cancelled) setHeatmap(result);
       } catch (caught) {
@@ -239,7 +356,21 @@ export function LiveDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [shopId, route, device, heatmapMode, sessions]);
+  }, [
+    shopId,
+    selectedRoute,
+    device,
+    heatmapMode,
+    timeQuery,
+    scrubIndex,
+    activity,
+    view,
+  ]);
+
+  // Reset scrub when leaving 24h or changing route.
+  useEffect(() => {
+    setScrubIndex(null);
+  }, [timePreset, selectedRoute]);
 
   const openReplay = (session: SessionSummary) => {
     if (!shopId) return;
@@ -277,27 +408,43 @@ export function LiveDashboard() {
     );
   }
 
-  const refresh = () =>
-    void loadSessions(shopId).catch((caught: unknown) => {
-      setError(
-        caught instanceof Error ? caught.message : "Unable to refresh sessions.",
-      );
-    });
+  const refresh = () => {
+    if (view === "Recordings") {
+      void loadSessions(shopId).catch((caught: unknown) => {
+        setError(
+          caught instanceof Error ? caught.message : "Unable to refresh sessions.",
+        );
+      });
+      return;
+    }
+    void loadSiteMap(shopId);
+  };
 
   const activeCount = sessions.filter((session) => session.status === "active").length;
   const dataStatus =
-    sessions.length === 0
-      ? "Awaiting data"
-      : activeCount > 0
-        ? `${activeCount} active`
-        : "Live data";
+    view === "Recordings"
+      ? sessions.length === 0
+        ? "Awaiting data"
+        : activeCount > 0
+          ? `${activeCount} active · live`
+          : "Live when tab open"
+      : mapLoading
+        ? "Loading map…"
+        : routeIndex
+          ? `${routeIndex.totalRoutes} routes · ${timePreset}`
+          : "Site map";
+
+  const showTimeline = Boolean(activity && activity.buckets.length > 0);
 
   return (
     <div className="app-shell live-shell">
       <aside className="rail" aria-label="Primary navigation">
         <button
           className="brand-mark"
-          onClick={() => setView("Heatmaps")}
+          onClick={() => {
+            setView("Heatmaps");
+            setSelectedRoute(null);
+          }}
           type="button"
         >
           <img src="/assets/pathminty-app-icon.png" alt="PathMinty" />
@@ -308,7 +455,10 @@ export function LiveDashboard() {
               className="rail-button"
               data-active={view === label}
               key={label}
-              onClick={() => setView(label)}
+              onClick={() => {
+                setView(label);
+                if (label === "Heatmaps") setSelectedRoute(null);
+              }}
               title={label}
               type="button"
             >
@@ -322,7 +472,13 @@ export function LiveDashboard() {
         <header className="topbar">
           <div className="title-lockup">
             <p>PathMinty</p>
-            <h1>{view}</h1>
+            <h1>
+              {view === "Heatmaps"
+                ? selectedRoute
+                  ? "Route heatmap"
+                  : "Site map"
+                : view}
+            </h1>
           </div>
           <div className="topbar-actions">
             <span className="demo-chip live-chip">
@@ -343,48 +499,252 @@ export function LiveDashboard() {
           </div>
         </header>
 
-        {sessions.length === 0 ? (
-          <EmptySessions onRefresh={refresh} />
-        ) : (
-          <div className="live-content">
-            {error && (
-              <div className="live-error" role="alert">
-                {error}
-              </div>
-            )}
+        {error && (
+          <div className="live-error" role="alert">
+            {error}
+          </div>
+        )}
 
-            {view === "Heatmaps" && (
-              <>
-                <section className="live-toolbar">
-                  <label>
-                    Route
+        {view === "Heatmaps" && (
+          <>
+            <section className="live-toolbar site-toolbar">
+              {selectedRoute ? (
+                <button
+                  className="control back-control"
+                  onClick={() => setSelectedRoute(null)}
+                  type="button"
+                >
+                  <ArrowLeft size={14} /> Site map
+                </button>
+              ) : null}
+              <div className="mode-switch" aria-label="Time range">
+                {TIME_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    data-active={timePreset === preset.id}
+                    onClick={() => setTimePreset(preset.id)}
+                    type="button"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
+              <div className="mode-switch" aria-label="Heatmap mode">
+                <button
+                  data-active={heatmapMode === "click"}
+                  onClick={() => setHeatmapMode("click")}
+                  type="button"
+                >
+                  Click
+                </button>
+                <button
+                  data-active={heatmapMode === "hover"}
+                  onClick={() => setHeatmapMode("hover")}
+                  type="button"
+                >
+                  Hover
+                </button>
+              </div>
+              <div className="device-switch" aria-label="Device">
+                <button
+                  data-active={device === "all"}
+                  onClick={() => setDevice("all")}
+                  type="button"
+                >
+                  All
+                </button>
+                <button
+                  data-active={device === "desktop"}
+                  onClick={() => setDevice("desktop")}
+                  title="Desktop"
+                  type="button"
+                >
+                  <Monitor size={16} />
+                </button>
+                <button
+                  data-active={device === "tablet"}
+                  onClick={() => setDevice("tablet")}
+                  title="Tablet"
+                  type="button"
+                >
+                  <DeviceTablet size={16} />
+                </button>
+                <button
+                  data-active={device === "mobile"}
+                  onClick={() => setDevice("mobile")}
+                  title="Mobile"
+                  type="button"
+                >
+                  <DeviceMobile size={16} />
+                </button>
+              </div>
+              {!selectedRoute && (
+                <>
+                  <label className="route-search">
+                    Search routes
+                    <input
+                      value={routeQuery}
+                      onChange={(event) => {
+                        setRouteQuery(event.target.value);
+                        setRouteLimit(SITE_MAP_PAGE);
+                      }}
+                      placeholder="/products/…"
+                      type="search"
+                    />
+                  </label>
+                  <label className="route-sort">
+                    Sort
                     <select
-                      aria-label="Route"
-                      value={route}
-                      onChange={(event) => setRoute(event.target.value)}
+                      value={routeSort}
+                      onChange={(event) =>
+                        setRouteSort(event.target.value as RouteSort)
+                      }
                     >
-                      {routes.map((item) => (
-                        <option key={item} value={item}>
-                          {item}
-                        </option>
-                      ))}
+                      <option value="most_active">Most active</option>
+                      <option value="least_active">Least active</option>
+                      <option value="sessions">Most sessions</option>
+                      <option value="alpha">A–Z</option>
                     </select>
                   </label>
-                  <div className="mode-switch" aria-label="Heatmap mode">
-                    <button
-                      data-active={heatmapMode === "click"}
-                      onClick={() => setHeatmapMode("click")}
-                      type="button"
-                    >
-                      Click
-                    </button>
-                    <button
-                      data-active={heatmapMode === "hover"}
-                      onClick={() => setHeatmapMode("hover")}
-                      type="button"
-                    >
-                      Hover / Dwell
-                    </button>
+                </>
+              )}
+              {selectedRoute && (
+                <span className="route-pill" title={selectedRoute}>
+                  {selectedRoute}
+                </span>
+              )}
+            </section>
+
+            {routeIndex && (
+              <section className="insight-strip" aria-label="Route insights">
+                <article>
+                  <p>Most active</p>
+                  <strong>{routeIndex.mostActive?.route ?? "—"}</strong>
+                  <span>
+                    {routeIndex.mostActive
+                      ? `${routeIndex.mostActive.eventCount} events · ${routeIndex.mostActive.sessionCount} sessions`
+                      : "No traffic in range"}
+                  </span>
+                </article>
+                <article>
+                  <p>Least active</p>
+                  <strong>{routeIndex.leastActive?.route ?? "—"}</strong>
+                  <span>
+                    {routeIndex.leastActive
+                      ? `${routeIndex.leastActive.eventCount} events · ≥3 sessions`
+                      : "Need ≥3 sessions on a quiet route"}
+                  </span>
+                </article>
+                <article>
+                  <p>In range</p>
+                  <strong>
+                    {routeIndex.totalSessions} sessions · {routeIndex.totalRoutes}{" "}
+                    routes
+                  </strong>
+                  <span>
+                    {routeIndex.totalEvents} {heatmapMode === "hover" ? "dwell" : "click"}{" "}
+                    events · {timePreset}
+                  </span>
+                </article>
+              </section>
+            )}
+
+            {selectedRoute ? (
+              <div className="heatmap-drill">
+                <div className="heatmap-drill-meta">
+                  <span>
+                    {heatmap?.eventCount ?? 0} events · {heatmap?.sessionCount ?? 0}{" "}
+                    sessions
+                    {scrubIndex !== null ? " · scrubbed" : ""}
+                  </span>
+                </div>
+                <HeatmapSurface heatmap={heatmap} loading={heatmapLoading} />
+              </div>
+            ) : (
+              <section className="site-map" aria-label="Site map">
+                {mapLoading && !routeIndex ? (
+                  <p className="site-map-status">Building site map…</p>
+                ) : routeIndex && routeIndex.routes.length === 0 ? (
+                  <EmptySessions onRefresh={refresh} />
+                ) : (
+                  <>
+                    <div className="site-map-grid">
+                      {routeIndex?.routes.map((stat, index) => {
+                        const mini = miniHeatmaps[stat.route];
+                        return (
+                          <button
+                            className="route-card"
+                            key={stat.route}
+                            onClick={() => setSelectedRoute(stat.route)}
+                            type="button"
+                          >
+                            <div className="route-card-preview">
+                              <MiniHeatmap points={mini?.points ?? []} />
+                              <span className="route-rank">#{index + 1}</span>
+                            </div>
+                            <div className="route-card-body">
+                              <strong title={stat.route}>{stat.route}</strong>
+                              <span>
+                                {stat.eventCount} events · {stat.sessionCount} sessions
+                              </span>
+                              <small>Last {relativeTime(stat.lastSeenAt)}</small>
+                            </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {routeIndex && routeIndex.totalRoutes > routeLimit && (
+                      <button
+                        className="control show-more"
+                        onClick={() => setRouteLimit((value) => value + SITE_MAP_PAGE)}
+                        type="button"
+                      >
+                        Show more routes ({routeIndex.totalRoutes - routeLimit} left)
+                      </button>
+                    )}
+                  </>
+                )}
+              </section>
+            )}
+
+            {showTimeline && activity && (
+              <ActivityTimeline
+                buckets={activity.buckets}
+                selectedIndex={scrubIndex}
+                onSelect={setScrubIndex}
+              />
+            )}
+          </>
+        )}
+
+        {view === "Recordings" &&
+          (sessions.length === 0 ? (
+            <EmptySessions onRefresh={refresh} />
+          ) : (
+            <div className="live-content">
+              <section className="live-panel">
+                <div className="panel-heading">
+                  <div>
+                    <p>Behaviour</p>
+                    <h2>Session recordings</h2>
+                  </div>
+                  <span>
+                    {activeCount} active · {sessions.length} in {timePreset} · live
+                    poll on this tab
+                  </span>
+                </div>
+                <section className="live-toolbar recordings-toolbar">
+                  <div className="mode-switch" aria-label="Time range">
+                    {TIME_PRESETS.map((preset) => (
+                      <button
+                        key={preset.id}
+                        data-active={timePreset === preset.id}
+                        onClick={() => setTimePreset(preset.id)}
+                        type="button"
+                      >
+                        {preset.label}
+                      </button>
+                    ))}
                   </div>
                   <div className="device-switch" aria-label="Device">
                     <button
@@ -397,53 +757,23 @@ export function LiveDashboard() {
                     <button
                       data-active={device === "desktop"}
                       onClick={() => setDevice("desktop")}
-                      title="Desktop"
                       type="button"
                     >
                       <Monitor size={16} />
                     </button>
                     <button
-                      data-active={device === "tablet"}
-                      onClick={() => setDevice("tablet")}
-                      title="Tablet"
-                      type="button"
-                    >
-                      <DeviceTablet size={16} />
-                    </button>
-                    <button
                       data-active={device === "mobile"}
                       onClick={() => setDevice("mobile")}
-                      title="Mobile"
                       type="button"
                     >
                       <DeviceMobile size={16} />
                     </button>
                   </div>
-                  <span>
-                    {heatmap?.eventCount ?? 0} events · {heatmap?.sessionCount ?? 0}{" "}
-                    sessions
-                  </span>
                 </section>
-                <HeatmapSurface heatmap={heatmap} loading={heatmapLoading} />
-              </>
-            )}
-
-            {view === "Recordings" && (
-              <section className="live-panel">
-                <div className="panel-heading">
-                  <div>
-                    <p>Behaviour</p>
-                    <h2>Session recordings</h2>
-                  </div>
-                  <span>
-                    {activeCount} active · {sessions.length} total · auto-refresh 15s
-                  </span>
-                </div>
                 <SessionRows sessions={sessions} onOpen={openReplay} />
               </section>
-            )}
-          </div>
-        )}
+            </div>
+          ))}
       </main>
       {replayOpen && (
         <ReplayViewer
