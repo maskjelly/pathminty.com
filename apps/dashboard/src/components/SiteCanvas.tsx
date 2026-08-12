@@ -14,13 +14,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { RouteCardPreview } from "./RouteCardPreview";
 
-/** Designer mock proportions: compact browser cards, wide horizontal flow. */
-const CARD_W = 248;
-const CARD_H = 210;
-const GAP_X = 110;
-const GAP_Y = 28;
-const COL_PAD = 56;
-const ROW_PAD = 56;
+/**
+ * Designer flow canvas:
+ *   Landing (left) → Collection / mid (center stack) → Product → Checkout (right)
+ * Highest-traffic edge is glowing blue with callout; cards match mock chrome.
+ */
+const CARD_W = 260;
+const CARD_H = 228;
+const GAP_X = 120;
+const GAP_Y = 36;
+const COL_PAD = 72;
+const ROW_PAD = 64;
 
 type Placed = {
   route: string;
@@ -28,7 +32,9 @@ type Placed = {
   y: number;
   stat: RouteStat;
   node: JourneyNode | null;
-  layer: number;
+  column: number;
+  kind: ReturnType<typeof classifyRoute>["kind"];
+  label: string;
 };
 
 type EdgeView = JourneyEdge & {
@@ -40,97 +46,95 @@ type EdgeView = JourneyEdge & {
 function classifyRoute(route: string): {
   kind: "home" | "collection" | "product" | "cart" | "checkout" | "other";
   label: string;
+  column: number;
 } {
   const r = route.toLowerCase();
-  if (r === "/" || r === "") return { kind: "home", label: "Landing page" };
-  if (r === "/cart" || r.startsWith("/cart/")) return { kind: "cart", label: "Cart" };
+  if (r === "/" || r === "") {
+    return { kind: "home", label: "Landing page", column: 0 };
+  }
+  if (r === "/cart" || r.startsWith("/cart/")) {
+    return { kind: "cart", label: "Cart", column: 3 };
+  }
   if (r.includes("/checkouts") || r.startsWith("/checkout")) {
-    return { kind: "checkout", label: "Checkout" };
+    return { kind: "checkout", label: "Checkout", column: 3 };
   }
   if (r.startsWith("/products/") || r.includes("/products/")) {
     const handle = route.split("/").filter(Boolean).pop() ?? "Product";
-    const name = handle
-      .replace(/^the-/, "")
-      .replace(/-/g, " ")
-      .replace(/\b\w/g, (c) => c.toUpperCase());
-    return { kind: "product", label: `Product: ${name}` };
+    const name = prettyHandle(handle);
+    return { kind: "product", label: `Product: ${name}`, column: 2 };
   }
   if (r.startsWith("/collections/")) {
     const handle = route.split("/").filter(Boolean).pop() ?? "Collection";
-    const name =
-      handle === "all"
-        ? "All Products"
-        : handle.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-    return { kind: "collection", label: `Collection: ${name}` };
+    const name = handle === "all" ? "All Products" : prettyHandle(handle);
+    return { kind: "collection", label: `Collection: ${name}`, column: 1 };
   }
-  if (r.startsWith("/pages/")) return { kind: "other", label: "Page" };
-  if (r.startsWith("/search")) return { kind: "other", label: "Search" };
-  return { kind: "other", label: "Page" };
+  if (r.startsWith("/search")) {
+    return { kind: "other", label: "Search", column: 1 };
+  }
+  return { kind: "other", label: "Page", column: 1 };
+}
+
+function prettyHandle(handle: string) {
+  return handle
+    .replace(/^the-/, "")
+    .replace(/-/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function shortPath(route: string) {
   if (route === "/") return "/";
-  if (route.length <= 28) return route;
+  if (route.length <= 26) return route;
   const parts = route.split("/").filter(Boolean);
   if (parts.length >= 2) {
     const last = parts[parts.length - 1] ?? "";
     const head = parts[0] ?? "";
-    const clipped =
-      last.length > 14 ? `${last.slice(0, 6)}…${last.slice(-6)}` : last;
+    const clipped = last.length > 12 ? `${last.slice(0, 5)}…${last.slice(-5)}` : last;
     return `/${head}/…${clipped}`;
   }
-  return `${route.slice(0, 12)}…${route.slice(-10)}`;
+  return `${route.slice(0, 11)}…${route.slice(-9)}`;
 }
 
+/** Force designer columns — never trust raw journey path index for layout. */
 function placeRoutes(
   routes: readonly RouteStat[],
   journey: JourneyGraphResponse | null,
 ): Placed[] {
   const byRoute = new Map(routes.map((r) => [r.route, r]));
   const nodeByRoute = new Map(journey?.nodes.map((n) => [n.route, n]) ?? []);
-  const layers = new Map<number, string[]>();
 
-  if (journey && journey.nodes.length > 0) {
-    for (const node of journey.nodes) {
-      const list = layers.get(node.layer) ?? [];
-      if (!list.includes(node.route)) list.push(node.route);
-      layers.set(node.layer, list);
-    }
-    const journeyRoutes = new Set(journey.nodes.map((n) => n.route));
-    const orphans = routes.filter((r) => !journeyRoutes.has(r.route)).map((r) => r.route);
-    if (orphans.length > 0) {
-      const maxLayer = layers.size > 0 ? Math.max(...layers.keys()) + 1 : 0;
-      layers.set(maxLayer, orphans);
-    }
-  } else {
-    for (const stat of routes) {
-      const { kind } = classifyRoute(stat.route);
-      const layer =
-        kind === "home"
-          ? 0
-          : kind === "cart" || kind === "checkout"
-            ? 3
-            : kind === "product"
-              ? 2
-              : 1;
-      const list = layers.get(layer) ?? [];
-      list.push(stat.route);
-      layers.set(layer, list);
-    }
+  // Union of route stats + journey nodes so the graph is complete.
+  const allRoutes = new Set<string>([
+    ...routes.map((r) => r.route),
+    ...(journey?.nodes.map((n) => n.route) ?? []),
+  ]);
+
+  const columns = new Map<number, string[]>();
+  for (const route of allRoutes) {
+    const { column } = classifyRoute(route);
+    const list = columns.get(column) ?? [];
+    list.push(route);
+    columns.set(column, list);
   }
 
+  // Ensure column order 0..3 even if empty gaps: compact to used columns left-to-right.
+  const usedColumns = [...columns.keys()].sort((a, b) => a - b);
+  const columnIndex = new Map(usedColumns.map((col, i) => [col, i]));
+
   const placed: Placed[] = [];
-  const layerKeys = [...layers.keys()].sort((a, b) => a - b);
-  layerKeys.forEach((layer, layerIndex) => {
-    const group = (layers.get(layer) ?? []).sort((a, b) => {
+  for (const col of usedColumns) {
+    const group = (columns.get(col) ?? []).sort((a, b) => {
       const sa = byRoute.get(a)?.sessionCount ?? nodeByRoute.get(a)?.sessionCount ?? 0;
       const sb = byRoute.get(b)?.sessionCount ?? nodeByRoute.get(b)?.sessionCount ?? 0;
-      return sb - sa;
+      return sb - sa || a.localeCompare(b);
     });
-    // Vertically center the stack for each column (like the design).
+    const colI = columnIndex.get(col) ?? 0;
     const stackH = group.length * CARD_H + Math.max(0, group.length - 1) * GAP_Y;
-    const startY = ROW_PAD + Math.max(0, (420 - stackH) / 2);
+    // Center each column stack on a shared midline so Landing sits mid-left.
+    const midY = 280;
+    const startY = Math.max(ROW_PAD, midY - stackH / 2);
+
     group.forEach((route, index) => {
+      const meta = classifyRoute(route);
       const node = nodeByRoute.get(route) ?? null;
       const stat = byRoute.get(route) ?? {
         route,
@@ -143,14 +147,16 @@ function placeRoutes(
       };
       placed.push({
         route,
-        x: COL_PAD + layerIndex * (CARD_W + GAP_X),
+        x: COL_PAD + colI * (CARD_W + GAP_X),
         y: startY + index * (CARD_H + GAP_Y),
         stat,
         node,
-        layer: layerIndex,
+        column: colI,
+        kind: meta.kind,
+        label: meta.label,
       });
     });
-  });
+  }
   return placed;
 }
 
@@ -166,27 +172,42 @@ function buildEdgeViews(
 
   const connected = journey.edges
     .filter((e) => pos.has(e.from) && pos.has(e.to) && e.sessionCount > 0)
-    .map((e) => ({
-      ...e,
-      shareOfFrom: e.sessionCount / (nodeSessions.get(e.from) ?? 1),
-      shareOfTraffic: e.sessionCount / totalSessions,
-      isPrimary: false,
-    }))
-    .sort((a, b) => b.sessionCount - a.sessionCount);
+    .map((e) => {
+      const from = pos.get(e.from);
+      const to = pos.get(e.to);
+      // Prefer forward edges (left → right). Keep back-edges only if strong.
+      const forward = (from?.column ?? 0) <= (to?.column ?? 0);
+      return {
+        ...e,
+        shareOfFrom: e.sessionCount / (nodeSessions.get(e.from) ?? 1),
+        shareOfTraffic: e.sessionCount / totalSessions,
+        isPrimary: false,
+        forward,
+      };
+    })
+    .sort((a, b) => {
+      if (a.forward !== b.forward) return a.forward ? -1 : 1;
+      return b.sessionCount - a.sessionCount;
+    });
 
-  const maxEdges = Math.min(20, Math.max(6, Math.ceil(pos.size * 1.4)));
-  const minSessions = connected[0]
-    ? Math.max(1, Math.floor(connected[0].sessionCount * 0.06))
-    : 1;
-  return connected
-    .filter((e) => e.sessionCount >= minSessions)
-    .slice(0, maxEdges)
-    .map((e, index) => ({ ...e, isPrimary: index === 0 }));
+  const forward = connected.filter((e) => e.forward);
+  const pool = forward.length > 0 ? forward : connected;
+  const maxEdges = Math.min(16, Math.max(4, Math.ceil(pos.size * 1.25)));
+  const top = pool.slice(0, maxEdges);
+  return top.map((e, index) => ({
+    from: e.from,
+    to: e.to,
+    sessionCount: e.sessionCount,
+    checkoutReachCount: e.checkoutReachCount,
+    checkoutRate: e.checkoutRate,
+    shareOfFrom: e.shareOfFrom,
+    shareOfTraffic: e.shareOfTraffic,
+    isPrimary: index === 0,
+  }));
 }
 
-/** Smooth cubic like the design — slight vertical bend. */
 function edgePath(x1: number, y1: number, x2: number, y2: number) {
-  const dx = Math.max(48, (x2 - x1) * 0.5);
+  const dx = Math.max(56, (x2 - x1) * 0.48);
   return `M ${x1} ${y1} C ${x1 + dx} ${y1}, ${x2 - dx} ${y2}, ${x2} ${y2}`;
 }
 
@@ -197,7 +218,7 @@ function pointOnCubic(
   y2: number,
   t: number,
 ): { x: number; y: number } {
-  const dx = Math.max(48, (x2 - x1) * 0.5);
+  const dx = Math.max(56, (x2 - x1) * 0.48);
   const c1x = x1 + dx;
   const c1y = y1;
   const c2x = x2 - dx;
@@ -221,9 +242,9 @@ export function SiteCanvas({
   onOpenRoute: (route: string) => void;
 }) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
-  const [scale, setScale] = useState(0.92);
-  const [tx, setTx] = useState(32);
-  const [ty, setTy] = useState(16);
+  const [scale, setScale] = useState(0.95);
+  const [tx, setTx] = useState(40);
+  const [ty, setTy] = useState(20);
   const drag = useRef<{
     active: boolean;
     startX: number;
@@ -245,7 +266,7 @@ export function SiteCanvas({
   const maxEdge = Math.max(1, ...edges.map((e) => e.sessionCount));
   const entrySessions = Math.max(
     1,
-    placed.find((p) => p.layer === 0)?.stat.sessionCount ??
+    placed.find((p) => p.kind === "home")?.stat.sessionCount ??
       journey?.totalSessions ??
       1,
   );
@@ -254,7 +275,7 @@ export function SiteCanvas({
   const onWheel = useCallback((event: React.WheelEvent) => {
     event.preventDefault();
     const delta = event.deltaY > 0 ? 0.92 : 1.08;
-    setScale((current) => Math.min(1.4, Math.max(0.4, current * delta)));
+    setScale((current) => Math.min(1.35, Math.max(0.45, current * delta)));
   }, []);
 
   useEffect(() => {
@@ -292,16 +313,16 @@ export function SiteCanvas({
   };
 
   const zoomBy = (factor: number) => {
-    setScale((current) => Math.min(1.4, Math.max(0.4, current * factor)));
+    setScale((current) => Math.min(1.35, Math.max(0.45, current * factor)));
   };
 
   const fit = () => {
-    setScale(0.92);
-    setTx(32);
-    setTy(16);
+    setScale(0.95);
+    setTx(40);
+    setTy(20);
   };
 
-  if (routes.length === 0 && (!journey || journey.nodes.length === 0)) {
+  if (placed.length === 0) {
     return (
       <div className="site-canvas-empty">
         <p>No page traffic in this range</p>
@@ -318,7 +339,7 @@ export function SiteCanvas({
     return new Set([hoverEdge.from, hoverEdge.to]);
   }, [hoverEdge]);
 
-  // Annotation position for primary path
+  // Callout sits ABOVE the primary edge midpoint — never on a card.
   let primaryCallout: { x: number; y: number } | null = null;
   if (primaryEdge) {
     const from = pos.get(primaryEdge.from);
@@ -328,8 +349,8 @@ export function SiteCanvas({
       const y1 = from.y + CARD_H / 2;
       const x2 = to.x;
       const y2 = to.y + CARD_H / 2;
-      primaryCallout = pointOnCubic(x1, y1, x2, y2, 0.35);
-      primaryCallout = { x: primaryCallout.x - 20, y: primaryCallout.y - 48 };
+      const mid = pointOnCubic(x1, y1, x2, y2, 0.45);
+      primaryCallout = { x: mid.x - 110, y: Math.min(mid.y, y1, y2) - 52 };
     }
   }
 
@@ -339,8 +360,8 @@ export function SiteCanvas({
         <div className="site-canvas-legend">
           <span className="site-canvas-eyebrow">Customer journey</span>
           <span className="site-canvas-hint">
-            Blue path = highest traffic · % under each page = share of entry sessions ·
-            green % = reached checkout
+            Left → right = path through the store · Blue glow = busiest step · % = share
+            of entry sessions · Green = reached checkout
           </span>
         </div>
         <div className="site-canvas-tools">
@@ -382,12 +403,11 @@ export function SiteCanvas({
           >
             <defs>
               <linearGradient id="primary-flow" x1="0%" y1="0%" x2="100%" y2="0%">
-                <stop offset="0%" stopColor="#1d9bf0" stopOpacity="0.35" />
-                <stop offset="50%" stopColor="#1d9bf0" stopOpacity="1" />
-                <stop offset="100%" stopColor="#00ba7c" stopOpacity="0.95" />
+                <stop offset="0%" stopColor="#1d9bf0" />
+                <stop offset="100%" stopColor="#00c2ff" />
               </linearGradient>
-              <filter id="glow-primary" x="-40%" y="-40%" width="180%" height="180%">
-                <feGaussianBlur stdDeviation="4" result="blur" />
+              <filter id="glow-primary" x="-50%" y="-50%" width="200%" height="200%">
+                <feGaussianBlur stdDeviation="5" result="blur" />
                 <feMerge>
                   <feMergeNode in="blur" />
                   <feMergeNode in="SourceGraphic" />
@@ -395,34 +415,37 @@ export function SiteCanvas({
               </filter>
               <marker
                 id="arrow-muted"
-                markerWidth="7"
-                markerHeight="7"
-                refX="6"
-                refY="3.5"
-                orient="auto"
-              >
-                <path d="M0,0 L7,3.5 L0,7 Z" fill="#6e767d" />
-              </marker>
-              <marker
-                id="arrow-primary"
                 markerWidth="8"
                 markerHeight="8"
                 refX="7"
                 refY="4"
                 orient="auto"
               >
-                <path d="M0,0 L8,4 L0,8 Z" fill="#1d9bf0" />
+                <path d="M0,0 L8,4 L0,8 Z" fill="#5b636a" />
+              </marker>
+              <marker
+                id="arrow-primary"
+                markerWidth="9"
+                markerHeight="9"
+                refX="8"
+                refY="4.5"
+                orient="auto"
+              >
+                <path d="M0,0 L9,4.5 L0,9 Z" fill="#1d9bf0" />
               </marker>
             </defs>
 
-            {edges.map((edge) => {
+            {/* Draw non-primary first so primary sits on top */}
+            {[...edges].sort((a, b) => Number(a.isPrimary) - Number(b.isPrimary)).map((edge) => {
               const from = pos.get(edge.from);
               const to = pos.get(edge.to);
               if (!from || !to) return null;
+
+              // Connect mid-right of source → mid-left of target (never through card body mid).
               const x1 = from.x + CARD_W;
-              const y1 = from.y + CARD_H / 2;
+              const y1 = from.y + CARD_H * 0.42;
               const x2 = to.x;
-              const y2 = to.y + CARD_H / 2;
+              const y2 = to.y + CARD_H * 0.42;
               const d = edgePath(x1, y1, x2, y2);
               const weight = edge.sessionCount / maxEdge;
               const active =
@@ -433,19 +456,16 @@ export function SiteCanvas({
                   hoverRoute !== edge.from &&
                   hoverRoute !== edge.to);
               const isPrimary = edge.isPrimary;
-              const stroke = isPrimary ? 5 + weight * 4 : 1.25 + weight * 5;
-              const dashed = !isPrimary && edge.shareOfFrom < 0.25;
-
-              // Beads on the primary path (designer mock).
+              const stroke = isPrimary ? 6 : 1.5 + weight * 4;
               const beads = isPrimary
-                ? [0.2, 0.4, 0.6, 0.8].map((t) => pointOnCubic(x1, y1, x2, y2, t))
+                ? [0.22, 0.45, 0.68].map((t) => pointOnCubic(x1, y1, x2, y2, t))
                 : [];
 
               return (
                 <g
                   key={`${edge.from}->${edge.to}`}
                   className="site-canvas-edge-group"
-                  opacity={dimmed ? 0.12 : 1}
+                  opacity={dimmed ? 0.1 : 1}
                   onMouseEnter={() => setHoverEdge(edge)}
                   onMouseLeave={() => setHoverEdge(null)}
                 >
@@ -453,33 +473,26 @@ export function SiteCanvas({
                     d={d}
                     fill="none"
                     stroke="transparent"
-                    strokeWidth={20}
+                    strokeWidth={22}
                     className="site-canvas-edge-hit"
                   />
                   {isPrimary && (
                     <path
                       d={d}
                       fill="none"
-                      stroke="url(#primary-flow)"
-                      strokeWidth={stroke + 6}
+                      stroke="#1d9bf0"
+                      strokeWidth={stroke + 10}
                       strokeLinecap="round"
-                      opacity={0.35}
+                      opacity={0.22}
                       filter="url(#glow-primary)"
                     />
                   )}
                   <path
                     d={d}
                     fill="none"
-                    stroke={
-                      isPrimary || active
-                        ? isPrimary
-                          ? "url(#primary-flow)"
-                          : "#1d9bf0"
-                        : "#6e767d"
-                    }
-                    strokeWidth={active && !isPrimary ? stroke + 1.5 : stroke}
+                    stroke={isPrimary || active ? "#1d9bf0" : "#5b636a"}
+                    strokeWidth={active && !isPrimary ? stroke + 1 : stroke}
                     strokeLinecap="round"
-                    strokeDasharray={dashed ? "6 6" : undefined}
                     markerEnd={
                       isPrimary || active ? "url(#arrow-primary)" : "url(#arrow-muted)"
                     }
@@ -490,11 +503,11 @@ export function SiteCanvas({
                       key={i}
                       cx={bead.x}
                       cy={bead.y}
-                      r={i === beads.length - 1 ? 5 : 4}
-                      className="flow-bead"
-                      fill={i === beads.length - 1 ? "#00ba7c" : "#1d9bf0"}
+                      r={4.5}
+                      fill="#1d9bf0"
                       stroke="#000"
                       strokeWidth={1.5}
+                      className="flow-bead"
                     />
                   ))}
                 </g>
@@ -514,14 +527,13 @@ export function SiteCanvas({
 
           {placed.map((item, index) => {
             const heat = heatmaps[item.route];
-            const { kind, label } = classifyRoute(item.route);
             const shareOfEntry = Math.round(
               (item.stat.sessionCount / entrySessions) * 100,
             );
             const checkoutPct = item.node
               ? Math.round(item.node.checkoutRate * 100)
               : null;
-            const isCheckout = kind === "checkout" || kind === "cart";
+            const isCheckout = item.kind === "checkout" || item.kind === "cart";
             const highlighted =
               relatedRoutes.has(item.route) || hoverRoute === item.route;
             const onPrimaryPath =
@@ -537,7 +549,7 @@ export function SiteCanvas({
               <article
                 key={item.route}
                 className="flow-card"
-                data-kind={kind}
+                data-kind={item.kind}
                 data-highlight={highlighted || onPrimaryPath ? "true" : "false"}
                 data-dimmed={dimmed ? "true" : "false"}
                 style={{ left: item.x, top: item.y, width: CARD_W, height: CARD_H }}
@@ -562,27 +574,32 @@ export function SiteCanvas({
                 </header>
 
                 <div className="flow-card-preview">
-                  <RouteCardPreview heatmap={heat} active={index < 14} />
+                  <RouteCardPreview heatmap={heat} active={index < 16} />
                 </div>
 
                 <footer className="flow-card-footer">
-                  <div className="flow-card-footer-title">{label}</div>
+                  <div className="flow-card-footer-title">{item.label}</div>
                   <div className="flow-card-footer-stats">
                     <span>
                       {item.stat.sessionCount}{" "}
                       {item.stat.sessionCount === 1 ? "session" : "sessions"}
-                      {kind === "home" ? "" : ` · ${shareOfEntry}%`}
                     </span>
-                    {kind === "home" && (
+                    {item.kind === "home" ? (
                       <span className="flow-card-entry">100%</span>
+                    ) : (
+                      <span>{shareOfEntry}%</span>
                     )}
-                    {isCheckout && checkoutPct !== null && (
-                      <span className="flow-card-conversion">{checkoutPct}% conversion</span>
-                    )}
-                    {!isCheckout && kind !== "home" && checkoutPct !== null && (
-                      <span className="flow-card-conversion muted">
-                        {checkoutPct}% → checkout
+                    {isCheckout && checkoutPct !== null ? (
+                      <span className="flow-card-conversion">
+                        {checkoutPct}% conversion
                       </span>
+                    ) : (
+                      checkoutPct !== null &&
+                      item.kind !== "home" && (
+                        <span className="flow-card-conversion muted">
+                          {checkoutPct}% → checkout
+                        </span>
+                      )
                     )}
                   </div>
                 </footer>
