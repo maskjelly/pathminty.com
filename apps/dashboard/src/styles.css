@@ -1723,3 +1723,221 @@ body {
     padding-bottom: 140px;
   }
 }
+
+/* —— Route card live preview —— */
+.route-card-preview {
+  position: relative;
+  min-height: 140px;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: #f3efe6;
+}
+.route-card-skeleton {
+  width: 100%;
+  height: 100%;
+  min-height: 140px;
+  background: linear-gradient(110deg, #ebe6da 20%, #f7f3ea 40%, #ebe6da 60%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s linear infinite;
+}
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+.route-card-mini {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.route-card-live-preview {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 140px;
+  overflow: hidden;
+  background: #fff;
+}
+.route-card-rrweb {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.route-card-rrweb .replayer-wrapper {
+  pointer-events: none;
+}
+.route-card-heat {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+}
+
+/* —— Journeys flow —— */
+.journey-view {
+  display: grid;
+  gap: 0;
+  min-height: calc(100vh - 80px);
+}
+.journey-hint {
+  margin-left: auto;
+  color: #7a7972;
+  font-size: 11px;
+}
+.journey-flow {
+  padding: 12px 24px 32px;
+}
+.journey-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 20px;
+  margin-bottom: 12px;
+  color: #8a8981;
+  font-size: 11px;
+}
+.journey-swatch {
+  display: inline-block;
+  width: 18px;
+  height: 6px;
+  margin-right: 6px;
+  border-radius: 99px;
+  vertical-align: middle;
+}
+.journey-swatch.traffic {
+  background: linear-gradient(90deg, #5e3322, #ff6a2b);
+}
+.journey-swatch.convert {
+  background: #77ca89;
+}
+.journey-basis {
+  margin-left: auto;
+  color: #ffb08a;
+  font-family: "DM Mono", monospace;
+  font-size: 10px;
+}
+.journey-canvas-wrap {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid #33332e;
+  border-radius: 12px;
+  background:
+    radial-gradient(circle at 20% 20%, rgb(255 106 43 / 6%), transparent 40%),
+    #141411;
+}
+.journey-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 380px;
+}
+.journey-edge {
+  transition: stroke 120ms ease, opacity 120ms ease;
+  cursor: default;
+}
+.journey-node-box {
+  fill: #1f1e1a;
+  stroke: #45443c;
+  stroke-width: 1.5;
+  transition: stroke 120ms ease, fill 120ms ease;
+}
+.journey-node-box.landing {
+  stroke: #ff6a2b;
+  fill: #241913;
+}
+.journey-node-box.checkout {
+  stroke: #77ca89;
+  fill: #152018;
+}
+.journey-node-box[data-active="true"] {
+  stroke: #ffb08a;
+  fill: #2a221c;
+}
+.journey-node-label {
+  fill: #f0ebe1;
+  font-size: 10px;
+  font-family: Inter, system-ui, sans-serif;
+  font-weight: 600;
+  pointer-events: none;
+}
+.journey-node-meta {
+  fill: #8d8c83;
+  font-size: 9px;
+  font-family: "DM Mono", monospace;
+  pointer-events: none;
+}
+.journey-tooltip {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  width: min(320px, calc(100% - 32px));
+  padding: 14px 16px;
+  border: 1px solid #4a4038;
+  border-radius: 8px;
+  background: rgb(23 22 18 / 96%);
+  box-shadow: 0 16px 40px rgb(0 0 0 / 35%);
+  pointer-events: none;
+}
+.journey-tooltip strong {
+  display: block;
+  overflow: hidden;
+  color: #f6f1e7;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.journey-tooltip p {
+  margin: 8px 0 4px;
+  color: #cfcabf;
+  font-size: 12px;
+}
+.journey-tooltip small {
+  color: #7d7c75;
+  font-size: 10px;
+  line-height: 1.4;
+}
+.journey-empty {
+  margin: 8vh auto;
+  max-width: 480px;
+  padding: 36px;
+  border: 1px solid #34342f;
+  border-radius: 10px;
+  background: #191916;
+  text-align: center;
+}
+.journey-empty p:first-child {
+  margin: 0 0 8px;
+  color: #78b986;
+  font-family: "DM Mono", monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.journey-empty h2 {
+  margin: 0 0 10px;
+  font-size: 22px;
+}
+.journey-empty p:last-child {
+  margin: 0;
+  color: #8e8c84;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.heatmap-legend i {
+  display: inline-block;
+  width: 72px;
+  height: 8px;
+  margin: 0 8px;
+  border-radius: 99px;
+  background: linear-gradient(
+    90deg,
+    rgb(59 130 246 / 40%),
+    rgb(250 204 21 / 70%),
+    rgb(239 68 68 / 90%)
+  );
+  vertical-align: middle;
+}

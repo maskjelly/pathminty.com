@@ -2,6 +2,7 @@ import {
   assessReplayReconstruction,
   buildActivityTimeline,
   buildHeatmap,
+  buildJourneyGraph,
   buildRouteIndex,
   extractSnapshotEvents,
   resolveSessionStatus,
@@ -439,7 +440,10 @@ app.get("/v1/shops/:shopId/heatmaps", async (context) => {
   return context.json(heatmap);
 });
 
-/** Points-only heatmaps for site-map cards (no DOM snapshots). */
+/**
+ * Batch heatmaps for site-map cards.
+ * `snapshot=1` loads DOM previews for at most 8 routes (R2-capped).
+ */
 app.get("/v1/shops/:shopId/heatmaps/batch", async (context) => {
   const shop = ShopIdSchema.safeParse(context.req.param("shopId"));
   if (!shop.success) return context.json({ error: "Invalid shop" }, 400);
@@ -469,24 +473,71 @@ app.get("/v1/shops/:shopId/heatmaps/batch", async (context) => {
   const window = parseTimeWindow(context.req);
   if ("error" in window) return context.json({ error: window.error }, 400);
 
+  const includeSnapshot = context.req.query("snapshot") === "1";
+  const snapshotLimit = Math.min(
+    routes.length,
+    Math.max(1, Number(context.req.query("snapshotLimit") ?? "8") || 8),
+    8,
+  );
+
   const sessions = await loadShopSessions(context.env.REPLAY_BUCKET, shop.data, {
     limit: 100,
   });
+  const objectStore = new R2ReplayObjectStore(context.env.REPLAY_BUCKET);
 
-  const heatmaps = routes.map((route) =>
-    buildHeatmap({
-      shopId: shop.data,
-      route,
-      device,
-      mode: mode.data,
-      sessions,
-      snapshotEvents: null,
-      fromMs: window.fromMs,
-      toMs: window.toMs,
-    }),
-  );
+  const heatmaps = [];
+  for (let index = 0; index < routes.length; index += 1) {
+    const route = routes[index];
+    if (!route) continue;
+    const wantSnapshot = includeSnapshot && index < snapshotLimit;
+    const snapshotEvents = wantSnapshot
+      ? await resolveSnapshotEvents(objectStore, shop.data, route, device, sessions)
+      : null;
+    heatmaps.push(
+      buildHeatmap({
+        shopId: shop.data,
+        route,
+        device,
+        mode: mode.data,
+        sessions,
+        snapshotEvents,
+        fromMs: window.fromMs,
+        toMs: window.toMs,
+      }),
+    );
+  }
 
   return context.json({ heatmaps });
+});
+
+app.get("/v1/shops/:shopId/journeys", async (context) => {
+  const shop = ShopIdSchema.safeParse(context.req.param("shopId"));
+  if (!shop.success) return context.json({ error: "Invalid shop" }, 400);
+  if (shop.data !== context.get("authorizedShopId")) {
+    return context.json({ error: "Shop access denied" }, 403);
+  }
+
+  const window = parseTimeWindow(context.req);
+  if ("error" in window) return context.json({ error: window.error }, 400);
+
+  const device = parseDevice(context.req.query("device") ?? undefined);
+  if (!device) return context.json({ error: "Invalid device" }, 400);
+
+  const rawMax = Number(context.req.query("maxNodes") ?? "24");
+  const maxNodes = Number.isInteger(rawMax) ? Math.min(Math.max(rawMax, 4), 48) : 24;
+
+  const sessions = await loadShopSessions(context.env.REPLAY_BUCKET, shop.data, {
+    limit: 100,
+  });
+  return context.json(
+    buildJourneyGraph({
+      sessions,
+      fromMs: window.fromMs,
+      toMs: window.toMs,
+      device,
+      maxNodes,
+    }),
+  );
 });
 
 app.notFound(() => new Response("Not found", { status: 404 }));

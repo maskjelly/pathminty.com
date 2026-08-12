@@ -6,6 +6,9 @@ import type {
   HeatmapMode,
   HeatmapPoint,
   HeatmapResponse,
+  JourneyEdge,
+  JourneyGraphResponse,
+  JourneyNode,
   ReplayBatch,
   RouteListResponse,
   RouteSort,
@@ -228,6 +231,163 @@ export function buildRouteIndex(input: {
     from: new Date(input.fromMs).toISOString(),
     to: new Date(input.toMs).toISOString(),
   };
+}
+
+/** Behavioral checkout proxy — not verified purchase until order join lands. */
+export function isCheckoutRoute(route: string): boolean {
+  const path = route.toLowerCase();
+  return (
+    path === "/cart" ||
+    path.startsWith("/cart/") ||
+    path === "/checkout" ||
+    path.startsWith("/checkout/") ||
+    path.startsWith("/checkouts/") ||
+    path.includes("/checkouts/")
+  );
+}
+
+/**
+ * Build a layered journey graph from session route sequences.
+ * `routes` on summaries are first-seen order from sequential batches.
+ */
+export function buildJourneyGraph(input: {
+  sessions: readonly SessionSummary[];
+  fromMs: number;
+  toMs: number;
+  device?: HeatmapResponse["device"];
+  maxNodes?: number;
+}): JourneyGraphResponse {
+  const maxNodes = Math.min(Math.max(input.maxNodes ?? 24, 4), 80);
+  const sessions = filterSessionsInRange(input.sessions, {
+    fromMs: input.fromMs,
+    toMs: input.toMs,
+    device: input.device ?? "all",
+  });
+
+  const nodeSessions = new Map<string, Set<string>>();
+  const nodeCheckout = new Map<string, Set<string>>();
+  const edgeSessions = new Map<string, Set<string>>();
+  const edgeCheckout = new Map<string, Set<string>>();
+  const nodeLayer = new Map<string, number>();
+  let checkoutSessions = 0;
+
+  for (const session of sessions) {
+    const path = uniquePath(session);
+    if (path.length === 0) continue;
+    const reachedCheckout = path.some((route) => isCheckoutRoute(route));
+    if (reachedCheckout) checkoutSessions += 1;
+
+    path.forEach((route, index) => {
+      const sessionsAt = nodeSessions.get(route) ?? new Set<string>();
+      sessionsAt.add(session.sessionId);
+      nodeSessions.set(route, sessionsAt);
+      if (reachedCheckout) {
+        const checkouts = nodeCheckout.get(route) ?? new Set<string>();
+        checkouts.add(session.sessionId);
+        nodeCheckout.set(route, checkouts);
+      }
+      const priorLayer = nodeLayer.get(route);
+      if (priorLayer === undefined || index < priorLayer) {
+        nodeLayer.set(route, index);
+      }
+    });
+
+    for (let i = 0; i < path.length - 1; i += 1) {
+      const from = path[i];
+      const to = path[i + 1];
+      if (!from || !to || from === to) continue;
+      const key = `${from}\0${to}`;
+      const edgeSet = edgeSessions.get(key) ?? new Set<string>();
+      edgeSet.add(session.sessionId);
+      edgeSessions.set(key, edgeSet);
+      if (reachedCheckout) {
+        const edgeCheck = edgeCheckout.get(key) ?? new Set<string>();
+        edgeCheck.add(session.sessionId);
+        edgeCheckout.set(key, edgeCheck);
+      }
+    }
+  }
+
+  const rankedRoutes = [...nodeSessions.entries()]
+    .map(([route, set]) => ({ route, count: set.size }))
+    .sort((a, b) => b.count - a.count || a.route.localeCompare(b.route));
+
+  // Keep top nodes by traffic, but always include landing (/) and any checkout routes.
+  const keep = new Set<string>();
+  for (const item of rankedRoutes) {
+    if (keep.size >= maxNodes) break;
+    keep.add(item.route);
+  }
+  for (const route of nodeSessions.keys()) {
+    if (route === "/" || isCheckoutRoute(route)) keep.add(route);
+  }
+
+  const nodes: JourneyNode[] = [...keep].map((route) => {
+    const sessionCount = nodeSessions.get(route)?.size ?? 0;
+    const checkoutReachCount = nodeCheckout.get(route)?.size ?? 0;
+    return {
+      route,
+      sessionCount,
+      checkoutReachCount,
+      checkoutRate: sessionCount > 0 ? checkoutReachCount / sessionCount : 0,
+      isLanding: route === "/",
+      isCheckout: isCheckoutRoute(route),
+      layer: nodeLayer.get(route) ?? 0,
+    };
+  });
+
+  // Normalize layers to 0..n among kept nodes for layout.
+  const layerValues = [...new Set(nodes.map((n) => n.layer))].sort((a, b) => a - b);
+  const layerMap = new Map(layerValues.map((value, index) => [value, index]));
+  for (const node of nodes) {
+    node.layer = layerMap.get(node.layer) ?? 0;
+    if (node.isCheckout) {
+      node.layer = Math.max(...[...layerMap.values()], 0) + 1;
+    }
+  }
+
+  const edges: JourneyEdge[] = [];
+  for (const [key, set] of edgeSessions) {
+    const [from, to] = key.split("\0");
+    if (!from || !to || !keep.has(from) || !keep.has(to)) continue;
+    const sessionCount = set.size;
+    const checkoutReachCount = edgeCheckout.get(key)?.size ?? 0;
+    edges.push({
+      from,
+      to,
+      sessionCount,
+      checkoutReachCount,
+      checkoutRate: sessionCount > 0 ? checkoutReachCount / sessionCount : 0,
+    });
+  }
+  edges.sort((a, b) => b.sessionCount - a.sessionCount);
+
+  return {
+    nodes: nodes.sort(
+      (a, b) => a.layer - b.layer || b.sessionCount - a.sessionCount,
+    ),
+    edges: edges.slice(0, 200),
+    totalSessions: sessions.length,
+    checkoutSessions,
+    from: new Date(input.fromMs).toISOString(),
+    to: new Date(input.toMs).toISOString(),
+    conversionBasis: "reached_checkout",
+  };
+}
+
+function uniquePath(session: SessionSummary): string[] {
+  // Prefer ordered first-seen routes; ensure entry is first.
+  const ordered: string[] = [];
+  const seen = new Set<string>();
+  const push = (route: string) => {
+    if (seen.has(route)) return;
+    seen.add(route);
+    ordered.push(route);
+  };
+  push(session.entryRoute);
+  for (const route of session.routes) push(route);
+  if (session.exitRoute) push(session.exitRoute);
+  return ordered;
 }
 
 export function buildActivityTimeline(input: {

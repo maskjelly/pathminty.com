@@ -342,6 +342,50 @@ export const HeatmapBatchResponseSchema = z
 
 export type HeatmapBatchResponse = z.infer<typeof HeatmapBatchResponseSchema>;
 
+/** Journey / flow graph built from session route sequences. */
+export const JourneyNodeSchema = z
+  .object({
+    route: z.string().min(1).max(2_048),
+    sessionCount: numberAsNonNegInt(),
+    /** Sessions that reached a checkout/cart route after this node. */
+    checkoutReachCount: numberAsNonNegInt(),
+    /** checkoutReachCount / sessionCount (0–1). Behavioral proxy, not purchase. */
+    checkoutRate: z.number().min(0).max(1),
+    isLanding: z.boolean(),
+    isCheckout: z.boolean(),
+    layer: z.number().int().nonnegative().max(32),
+  })
+  .strict();
+
+export type JourneyNode = z.infer<typeof JourneyNodeSchema>;
+
+export const JourneyEdgeSchema = z
+  .object({
+    from: z.string().min(1).max(2_048),
+    to: z.string().min(1).max(2_048),
+    sessionCount: numberAsNonNegInt(),
+    checkoutReachCount: numberAsNonNegInt(),
+    checkoutRate: z.number().min(0).max(1),
+  })
+  .strict();
+
+export type JourneyEdge = z.infer<typeof JourneyEdgeSchema>;
+
+export const JourneyGraphResponseSchema = z
+  .object({
+    nodes: z.array(JourneyNodeSchema).max(80),
+    edges: z.array(JourneyEdgeSchema).max(200),
+    totalSessions: numberAsNonNegInt(),
+    checkoutSessions: numberAsNonNegInt(),
+    from: z.string().datetime({ offset: true }),
+    to: z.string().datetime({ offset: true }),
+    /** Honest label: rates are "reached checkout", not verified purchase. */
+    conversionBasis: z.literal("reached_checkout"),
+  })
+  .strict();
+
+export type JourneyGraphResponse = z.infer<typeof JourneyGraphResponseSchema>;
+
 function numberAsNonNegInt() {
   return z.number().int().nonnegative();
 }

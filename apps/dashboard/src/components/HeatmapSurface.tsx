@@ -12,6 +12,7 @@ import {
   computeHeatmapDisplayLayout,
   heatmapRrwebWrapperPinStyles,
 } from "../heatmapLayout";
+import { drawTopographicHeat } from "../topographicHeat";
 
 function drawHeatLayer(
   canvas: HTMLCanvasElement,
@@ -19,33 +20,13 @@ function drawHeatLayer(
   width: number,
   height: number,
 ) {
-  const context = canvas.getContext("2d");
-  if (!context) return;
   // Backing store + CSS size must match the full document display so scroll
   // keeps the heat layer aligned over the entire reconstructed page.
-  canvas.width = width;
-  canvas.height = height;
-  canvas.style.width = `${width}px`;
-  canvas.style.height = `${height}px`;
-  context.clearRect(0, 0, width, height);
-  if (points.length === 0) return;
-
-  const maxWeight = Math.max(...points.map((point) => point.weight), 1);
-  for (const point of points) {
-    const x = point.x * width;
-    const y = point.y * height;
-    const radius = 18 + (point.weight / maxWeight) * 28;
-    const gradient = context.createRadialGradient(x, y, 0, x, y, radius);
-    const alpha = 0.25 + (point.weight / maxWeight) * 0.55;
-    gradient.addColorStop(0, `rgba(222, 34, 21, ${alpha})`);
-    gradient.addColorStop(0.35, `rgba(255, 129, 23, ${alpha * 0.75})`);
-    gradient.addColorStop(0.7, `rgba(255, 221, 53, ${alpha * 0.35})`);
-    gradient.addColorStop(1, "rgba(255, 221, 53, 0)");
-    context.fillStyle = gradient;
-    context.beginPath();
-    context.arc(x, y, radius, 0, Math.PI * 2);
-    context.fill();
-  }
+  drawTopographicHeat(canvas, points, width, height, {
+    gridWidth: Math.min(140, Math.max(72, Math.round(width / 10))),
+    blurPasses: 3,
+    contours: true,
+  });
 }
 
 function toRrwebEvents(events: readonly RrwebEvent[]): eventWithTime[] {

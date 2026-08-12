@@ -6,9 +6,11 @@ import {
   assessReplayReconstruction,
   buildActivityTimeline,
   buildHeatmap,
+  buildJourneyGraph,
   buildRouteIndex,
   calculateNetRevenueMinor,
   computeScrollDepth,
+  isCheckoutRoute,
   normalizeClientToDocument,
   normalizeStorefrontRoute,
   orderReplayEvents,
@@ -641,5 +643,58 @@ describe("time range and route index", () => {
     });
     expect(timeline.buckets).toHaveLength(24);
     expect(timeline.buckets.reduce((sum, b) => sum + b.eventCount, 0)).toBe(2);
+  });
+});
+
+describe("journey graph", () => {
+  const now = Date.parse("2026-08-12T12:00:00.000Z");
+
+  it("detects checkout routes", () => {
+    expect(isCheckoutRoute("/cart")).toBe(true);
+    expect(isCheckoutRoute("/checkouts/cn/abc")).toBe(true);
+    expect(isCheckoutRoute("/products/x")).toBe(false);
+  });
+
+  it("builds edges and checkout rates from route sequences", () => {
+    const base = summarizeReplayBatches([rrwebBatch({ sequence: 0 })], {
+      isFinal: true,
+    });
+    const sessions: SessionSummary[] = [
+      {
+        ...base,
+        sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        entryRoute: "/",
+        exitRoute: "/checkouts/cn/1",
+        routes: ["/", "/collections/x", "/checkouts/cn/1"],
+        startedAt: new Date(now - 60_000).toISOString(),
+        lastSeenAt: new Date(now - 1_000).toISOString(),
+        endedAt: new Date(now - 1_000).toISOString(),
+      },
+      {
+        ...base,
+        sessionId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        visitorId: "visitor_two",
+        entryRoute: "/",
+        exitRoute: "/collections/x",
+        routes: ["/", "/collections/x"],
+        startedAt: new Date(now - 50_000).toISOString(),
+        lastSeenAt: new Date(now - 2_000).toISOString(),
+        endedAt: new Date(now - 2_000).toISOString(),
+      },
+    ];
+    const graph = buildJourneyGraph({
+      sessions,
+      fromMs: now - 120_000,
+      toMs: now,
+    });
+    expect(graph.totalSessions).toBe(2);
+    expect(graph.checkoutSessions).toBe(1);
+    expect(graph.conversionBasis).toBe("reached_checkout");
+    const landing = graph.nodes.find((n) => n.route === "/");
+    expect(landing?.checkoutRate).toBe(0.5);
+    const edge = graph.edges.find(
+      (e) => e.from === "/" && e.to === "/collections/x",
+    );
+    expect(edge?.sessionCount).toBe(2);
   });
 });

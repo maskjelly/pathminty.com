@@ -2,6 +2,7 @@ import {
   ActivityTimelineResponseSchema,
   HeatmapBatchResponseSchema,
   HeatmapResponseSchema,
+  JourneyGraphResponseSchema,
   ReplaySessionResponseSchema,
   RouteListResponseSchema,
   SessionListResponseSchema,
@@ -9,6 +10,7 @@ import {
   type ActivityTimelineResponse,
   type HeatmapMode,
   type HeatmapResponse,
+  type JourneyGraphResponse,
   type ReplaySessionResponse,
   type RouteListResponse,
   type RouteSort,
@@ -207,6 +209,9 @@ export async function getHeatmapBatch(
     device: DashboardDevice;
     mode: HeatmapMode;
     time: TimeQuery;
+    /** Include rrweb snapshots for the first N routes (capped server-side at 8). */
+    snapshot?: boolean;
+    snapshotLimit?: number;
   },
 ): Promise<HeatmapResponse[]> {
   if (params.routes.length === 0) return [];
@@ -214,9 +219,31 @@ export async function getHeatmapBatch(
   query.set("routes", params.routes.join("|"));
   query.set("device", params.device);
   query.set("mode", params.mode);
+  if (params.snapshot) {
+    query.set("snapshot", "1");
+    query.set("snapshotLimit", String(params.snapshotLimit ?? 8));
+  }
   const response = await apiRequest(
     `/v1/shops/${encodeURIComponent(shopId)}/heatmaps/batch?${query.toString()}`,
   );
   if (!response.ok) throw new Error("Unable to load site map heatmaps.");
   return HeatmapBatchResponseSchema.parse(await response.json()).heatmaps;
+}
+
+export async function getJourneys(
+  shopId: string,
+  options: {
+    time: TimeQuery;
+    device: DashboardDevice;
+    maxNodes?: number;
+  },
+): Promise<JourneyGraphResponse> {
+  const params = timeSearchParams(options.time);
+  params.set("device", options.device);
+  if (options.maxNodes) params.set("maxNodes", String(options.maxNodes));
+  const response = await apiRequest(
+    `/v1/shops/${encodeURIComponent(shopId)}/journeys?${params.toString()}`,
+  );
+  if (!response.ok) throw new Error("Unable to load journeys.");
+  return JourneyGraphResponseSchema.parse(await response.json());
 }
