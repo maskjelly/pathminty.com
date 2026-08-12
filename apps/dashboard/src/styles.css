@@ -147,18 +147,35 @@ body {
 .brand-mark {
   display: grid;
   place-items: center;
-  width: 40px;
-  height: 40px;
+  width: 44px;
+  height: 44px;
   margin-bottom: 12px;
   overflow: hidden;
   border: 0;
-  border-radius: var(--radius);
+  border-radius: 10px;
   background: transparent;
   padding: 0;
   cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
 }
 .brand-mark:hover {
-  background: var(--bg-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 1px rgba(0, 186, 124, 0.35), 0 0 16px rgba(0, 186, 124, 0.18);
+}
+.brand-mark:active {
+  transform: translateY(0);
+}
+.brand-mark-glyph {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+}
+.brand-mark-glyph svg {
+  width: 36px;
+  height: 36px;
+  display: block;
+  border-radius: 8px;
 }
 .brand-mark img {
   width: 28px;
@@ -735,6 +752,11 @@ body {
 .flow-card-conversion.muted {
   color: #8b98a5;
   font-weight: 600;
+}
+.flow-card-revenue {
+  color: #00ba7c;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
 }
 
 .site-canvas-edge-tip {

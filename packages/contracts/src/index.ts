@@ -210,6 +210,17 @@ export const SessionSummarySchema = z
     hasFullSnapshot: z.boolean(),
     clicks: z.array(HeatmapClickSchema).max(2_000),
     hovers: z.array(HeatmapHoverSchema).max(2_000),
+    /** Checkout tokens seen on this journey (pixel + order join). */
+    checkoutTokens: z.array(z.string().min(1).max(255)).max(16).optional(),
+    /** Shopify order id when this session was joined to a purchase. */
+    orderId: z.string().min(1).max(64).optional(),
+    /** Net revenue attributed to this session (integer minor units). */
+    netRevenueMinor: z.number().int().nonnegative().optional(),
+    currency: z
+      .string()
+      .regex(/^[A-Z]{3}$/)
+      .optional(),
+    purchasedAt: z.string().datetime({ offset: true }).optional(),
   })
   .strict();
 
@@ -290,6 +301,13 @@ export const RouteStatSchema = z
     hoverWeight: numberAsNonNegInt(),
     lastSeenAt: z.string().datetime({ offset: true }),
     hasFullSnapshot: z.boolean(),
+    /** Multi-touch: sum of net revenue from purchasing sessions that visited this route. */
+    netRevenueMinor: numberAsNonNegInt(),
+    orderCount: numberAsNonNegInt(),
+    currency: z
+      .string()
+      .regex(/^[A-Z]{3}$/)
+      .nullable(),
   })
   .strict();
 
@@ -303,6 +321,12 @@ export const RouteListResponseSchema = z
     totalSessions: numberAsNonNegInt(),
     totalEvents: numberAsNonNegInt(),
     totalRoutes: numberAsNonNegInt(),
+    totalNetRevenueMinor: numberAsNonNegInt(),
+    orderCount: numberAsNonNegInt(),
+    currency: z
+      .string()
+      .regex(/^[A-Z]{3}$/)
+      .nullable(),
     from: z.string().datetime({ offset: true }),
     to: z.string().datetime({ offset: true }),
   })
@@ -349,8 +373,11 @@ export const JourneyNodeSchema = z
     sessionCount: numberAsNonNegInt(),
     /** Sessions that reached a checkout/cart route after this node. */
     checkoutReachCount: numberAsNonNegInt(),
-    /** checkoutReachCount / sessionCount (0–1). Behavioral proxy, not purchase. */
+    /** checkoutReachCount / sessionCount (0–1). Behavioral proxy when no order join. */
     checkoutRate: z.number().min(0).max(1),
+    /** Purchasing sessions that visited this route (verified order join). */
+    orderCount: numberAsNonNegInt(),
+    netRevenueMinor: numberAsNonNegInt(),
     isLanding: z.boolean(),
     isCheckout: z.boolean(),
     layer: z.number().int().nonnegative().max(32),
@@ -366,6 +393,8 @@ export const JourneyEdgeSchema = z
     sessionCount: numberAsNonNegInt(),
     checkoutReachCount: numberAsNonNegInt(),
     checkoutRate: z.number().min(0).max(1),
+    orderCount: numberAsNonNegInt(),
+    netRevenueMinor: numberAsNonNegInt(),
   })
   .strict();
 
@@ -377,10 +406,19 @@ export const JourneyGraphResponseSchema = z
     edges: z.array(JourneyEdgeSchema).max(200),
     totalSessions: numberAsNonNegInt(),
     checkoutSessions: numberAsNonNegInt(),
+    orderCount: numberAsNonNegInt(),
+    totalNetRevenueMinor: numberAsNonNegInt(),
+    currency: z
+      .string()
+      .regex(/^[A-Z]{3}$/)
+      .nullable(),
     from: z.string().datetime({ offset: true }),
     to: z.string().datetime({ offset: true }),
-    /** Honest label: rates are "reached checkout", not verified purchase. */
-    conversionBasis: z.literal("reached_checkout"),
+    /**
+     * `verified_purchase` when at least one session in range has order join;
+     * otherwise behavioral checkout reach only.
+     */
+    conversionBasis: z.enum(["reached_checkout", "verified_purchase"]),
   })
   .strict();
 
@@ -448,6 +486,73 @@ export type SessionSummaryJob = z.infer<typeof SessionSummaryJobSchema>;
 /** @deprecated Prefer SessionSummaryJobSchema; kept as an alias for existing consumers. */
 export const SessionCompletedJobSchema = SessionSummaryJobSchema;
 export type SessionCompletedJob = SessionSummaryJob;
+
+/**
+ * Queue message after gateway verifies a Shopify commerce/compliance webhook.
+ * Payload is already authenticated; consumers must still validate shape and
+ * never log the raw body (may contain residual PII in unexpected fields).
+ */
+export const ShopifyWebhookJobSchema = z
+  .object({
+    schemaVersion: z.literal(REPLAY_CONTRACT_VERSION),
+    webhookId: z.string().min(1).max(128),
+    shop: ShopIdSchema,
+    topic: z.enum([
+      "ORDERS_CREATE",
+      "ORDERS_UPDATED",
+      "REFUNDS_CREATE",
+      "CUSTOMERS_DATA_REQUEST",
+      "CUSTOMERS_REDACT",
+      "SHOP_REDACT",
+    ]),
+    receivedAt: z.string().min(20).max(40),
+    payload: z.unknown(),
+  })
+  .strict();
+
+export type ShopifyWebhookJob = z.infer<typeof ShopifyWebhookJobSchema>;
+
+/**
+ * Verified commerce order fact (Level 1 PCD fields only).
+ * Stored as JSON with integer minor units; shopId-scoped.
+ */
+export const OrderFactSchema = z
+  .object({
+    schemaVersion: z.literal(REPLAY_CONTRACT_VERSION),
+    shopId: ShopIdSchema,
+    shopifyOrderId: z.string().min(1).max(64),
+    checkoutToken: z.string().min(1).max(255).optional(),
+    sessionId: UuidSchema.optional().nullable(),
+    currency: z.string().regex(/^[A-Z]{3}$/),
+    gmvMinor: z.number().int().nonnegative(),
+    discountsMinor: z.number().int().nonnegative(),
+    refundsMinor: z.number().int().nonnegative(),
+    cancellationsMinor: z.number().int().nonnegative(),
+    netRevenueMinor: z.number().int().nonnegative(),
+    orderedAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+    financialStatus: z.string().min(1).max(64).optional(),
+    cancelledAt: z.string().datetime({ offset: true }).nullable().optional(),
+  })
+  .strict();
+
+export type OrderFact = z.infer<typeof OrderFactSchema>;
+
+/** Maps checkout_token → session / order for join without scanning all summaries. */
+export const CheckoutIndexSchema = z
+  .object({
+    schemaVersion: z.literal(REPLAY_CONTRACT_VERSION),
+    shopId: ShopIdSchema,
+    checkoutToken: z.string().min(1).max(255),
+    sessionId: UuidSchema.optional(),
+    shopifyOrderId: z.string().min(1).max(64).optional(),
+    clientId: z.string().min(1).max(255).optional(),
+    occurredAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .strict();
+
+export type CheckoutIndex = z.infer<typeof CheckoutIndexSchema>;
 
 export const CollectorAcceptedSchema = z
   .object({

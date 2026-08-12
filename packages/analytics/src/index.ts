@@ -132,12 +132,34 @@ export function buildRouteIndex(input: {
       eventCount: number;
       lastSeenMs: number;
       hasFullSnapshot: boolean;
+      netRevenueMinor: number;
+      orderIds: Set<string>;
+      currency: string | null;
     }
   >();
 
+  let totalNetRevenueMinor = 0;
+  const orderIdsGlobal = new Set<string>();
+  let currency: string | null = null;
+
   for (const session of sessions) {
     const lastSeenMs = Date.parse(session.lastSeenAt);
-    for (const route of new Set([session.entryRoute, ...session.routes])) {
+    const sessionRevenue =
+      typeof session.netRevenueMinor === "number" && session.netRevenueMinor > 0
+        ? session.netRevenueMinor
+        : 0;
+    if (sessionRevenue > 0 && session.orderId) {
+      if (!orderIdsGlobal.has(session.orderId)) {
+        orderIdsGlobal.add(session.orderId);
+        totalNetRevenueMinor += sessionRevenue;
+      }
+      if (session.currency) currency = session.currency;
+    }
+    for (const route of new Set([
+      session.entryRoute,
+      ...session.routes,
+      session.exitRoute,
+    ])) {
       if (query && !route.toLowerCase().includes(query)) continue;
       const weights = routeEventWeight(
         session,
@@ -154,6 +176,9 @@ export function buildRouteIndex(input: {
         eventCount: 0,
         lastSeenMs: 0,
         hasFullSnapshot: false,
+        netRevenueMinor: 0,
+        orderIds: new Set<string>(),
+        currency: null as string | null,
       };
       existing.sessionIds.add(session.sessionId);
       existing.clickCount += weights.clicks;
@@ -163,6 +188,12 @@ export function buildRouteIndex(input: {
         existing.lastSeenMs = Math.max(existing.lastSeenMs, lastSeenMs);
       }
       if (session.hasFullSnapshot) existing.hasFullSnapshot = true;
+      // Multi-touch: full order net revenue on every route in the purchasing path.
+      if (sessionRevenue > 0 && session.orderId && !existing.orderIds.has(session.orderId)) {
+        existing.orderIds.add(session.orderId);
+        existing.netRevenueMinor += sessionRevenue;
+        if (session.currency) existing.currency = session.currency;
+      }
       byRoute.set(route, existing);
     }
   }
@@ -175,6 +206,9 @@ export function buildRouteIndex(input: {
     hoverWeight: value.hoverWeight,
     lastSeenAt: new Date(value.lastSeenMs || input.toMs).toISOString(),
     hasFullSnapshot: value.hasFullSnapshot,
+    netRevenueMinor: value.netRevenueMinor,
+    orderCount: value.orderIds.size,
+    currency: value.currency,
   }));
 
   const byMostActive = [...stats].sort((left, right) => {
@@ -228,6 +262,9 @@ export function buildRouteIndex(input: {
     totalSessions: sessions.length,
     totalEvents,
     totalRoutes: stats.length,
+    totalNetRevenueMinor,
+    orderCount: orderIdsGlobal.size,
+    currency,
     from: new Date(input.fromMs).toISOString(),
     to: new Date(input.toMs).toISOString(),
   };
@@ -266,16 +303,33 @@ export function buildJourneyGraph(input: {
 
   const nodeSessions = new Map<string, Set<string>>();
   const nodeCheckout = new Map<string, Set<string>>();
+  const nodeOrders = new Map<string, Set<string>>();
+  const nodeRevenue = new Map<string, number>();
   const edgeSessions = new Map<string, Set<string>>();
   const edgeCheckout = new Map<string, Set<string>>();
+  const edgeOrders = new Map<string, Set<string>>();
+  const edgeRevenue = new Map<string, number>();
   const nodeLayer = new Map<string, number>();
   let checkoutSessions = 0;
+  let totalNetRevenueMinor = 0;
+  const orderIdsGlobal = new Set<string>();
+  let currency: string | null = null;
 
   for (const session of sessions) {
     const path = uniquePath(session);
     if (path.length === 0) continue;
     const reachedCheckout = path.some((route) => isCheckoutRoute(route));
     if (reachedCheckout) checkoutSessions += 1;
+    const sessionRevenue =
+      typeof session.netRevenueMinor === "number" && session.netRevenueMinor > 0
+        ? session.netRevenueMinor
+        : 0;
+    const hasOrder = Boolean(session.orderId && sessionRevenue > 0);
+    if (hasOrder && session.orderId && !orderIdsGlobal.has(session.orderId)) {
+      orderIdsGlobal.add(session.orderId);
+      totalNetRevenueMinor += sessionRevenue;
+      if (session.currency) currency = session.currency;
+    }
 
     path.forEach((route, index) => {
       const sessionsAt = nodeSessions.get(route) ?? new Set<string>();
@@ -285,6 +339,14 @@ export function buildJourneyGraph(input: {
         const checkouts = nodeCheckout.get(route) ?? new Set<string>();
         checkouts.add(session.sessionId);
         nodeCheckout.set(route, checkouts);
+      }
+      if (hasOrder && session.orderId) {
+        const orders = nodeOrders.get(route) ?? new Set<string>();
+        if (!orders.has(session.orderId)) {
+          orders.add(session.orderId);
+          nodeOrders.set(route, orders);
+          nodeRevenue.set(route, (nodeRevenue.get(route) ?? 0) + sessionRevenue);
+        }
       }
       const priorLayer = nodeLayer.get(route);
       if (priorLayer === undefined || index < priorLayer) {
@@ -304,6 +366,14 @@ export function buildJourneyGraph(input: {
         const edgeCheck = edgeCheckout.get(key) ?? new Set<string>();
         edgeCheck.add(session.sessionId);
         edgeCheckout.set(key, edgeCheck);
+      }
+      if (hasOrder && session.orderId) {
+        const edgeOrderSet = edgeOrders.get(key) ?? new Set<string>();
+        if (!edgeOrderSet.has(session.orderId)) {
+          edgeOrderSet.add(session.orderId);
+          edgeOrders.set(key, edgeOrderSet);
+          edgeRevenue.set(key, (edgeRevenue.get(key) ?? 0) + sessionRevenue);
+        }
       }
     }
   }
@@ -325,11 +395,14 @@ export function buildJourneyGraph(input: {
   const nodes: JourneyNode[] = [...keep].map((route) => {
     const sessionCount = nodeSessions.get(route)?.size ?? 0;
     const checkoutReachCount = nodeCheckout.get(route)?.size ?? 0;
+    const orderCount = nodeOrders.get(route)?.size ?? 0;
     return {
       route,
       sessionCount,
       checkoutReachCount,
       checkoutRate: sessionCount > 0 ? checkoutReachCount / sessionCount : 0,
+      orderCount,
+      netRevenueMinor: nodeRevenue.get(route) ?? 0,
       isLanding: route === "/",
       isCheckout: isCheckoutRoute(route),
       layer: nodeLayer.get(route) ?? 0,
@@ -358,6 +431,8 @@ export function buildJourneyGraph(input: {
       sessionCount,
       checkoutReachCount,
       checkoutRate: sessionCount > 0 ? checkoutReachCount / sessionCount : 0,
+      orderCount: edgeOrders.get(key)?.size ?? 0,
+      netRevenueMinor: edgeRevenue.get(key) ?? 0,
     });
   }
   edges.sort((a, b) => b.sessionCount - a.sessionCount);
@@ -369,9 +444,13 @@ export function buildJourneyGraph(input: {
     edges: edges.slice(0, 200),
     totalSessions: sessions.length,
     checkoutSessions,
+    orderCount: orderIdsGlobal.size,
+    totalNetRevenueMinor,
+    currency,
     from: new Date(input.fromMs).toISOString(),
     to: new Date(input.toMs).toISOString(),
-    conversionBasis: "reached_checkout",
+    conversionBasis:
+      orderIdsGlobal.size > 0 ? "verified_purchase" : "reached_checkout",
   };
 }
 
@@ -485,6 +564,239 @@ export function calculateNetRevenueMinor(components: RevenueComponents): bigint 
     components.cancellationsMinor;
 
   return result > 0n ? result : 0n;
+}
+
+/** Shopify money strings ("199.00") → integer minor units (cents). */
+export function shopifyMoneyToMinor(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+    return Math.round(value * 100);
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed) && parsed >= 0) return Math.round(parsed * 100);
+  }
+  return 0;
+}
+
+function readRecord(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null
+    ? (value as Record<string, unknown>)
+    : null;
+}
+
+function asIso(value: unknown, fallback: string): string {
+  if (typeof value === "string") {
+    const ms = Date.parse(value);
+    if (Number.isFinite(ms)) return new Date(ms).toISOString();
+  }
+  return fallback;
+}
+
+function asCurrency(value: unknown): string {
+  if (typeof value === "string" && /^[A-Za-z]{3}$/u.test(value)) {
+    return value.toUpperCase();
+  }
+  return "USD";
+}
+
+function asOrderId(value: unknown): string | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return String(Math.trunc(value));
+  }
+  if (typeof value === "string" && value.trim() !== "") {
+    // Accept numeric or GraphQL gid://shopify/Order/123
+    const gid = value.match(/Order\/(\d+)/u);
+    if (gid?.[1]) return gid[1];
+    return value.slice(0, 64);
+  }
+  return null;
+}
+
+/**
+ * Normalize Shopify orders/create|updated Level-1 include_fields into OrderFact.
+ * Never logs payload; returns null when required fields are missing.
+ */
+export function parseShopifyOrderPayload(
+  shopId: string,
+  payload: unknown,
+  nowIso: string = new Date().toISOString(),
+): import("@pathminty/contracts").OrderFact | null {
+  const body = readRecord(payload);
+  if (!body) return null;
+  const shopifyOrderId = asOrderId(body.id);
+  if (!shopifyOrderId) return null;
+
+  const discountsMinor = shopifyMoneyToMinor(body.current_total_discounts);
+  // current_total_price is post-discount; reconstruct GMV ≈ price + discounts.
+  const currentTotalMinor = shopifyMoneyToMinor(body.current_total_price);
+  const gmvMinor = currentTotalMinor + discountsMinor;
+  const cancelledAtRaw = body.cancelled_at;
+  const isCancelled =
+    cancelledAtRaw !== null &&
+    cancelledAtRaw !== undefined &&
+    cancelledAtRaw !== "";
+  const cancellationsMinor = isCancelled ? currentTotalMinor : 0;
+  const refundsMinor = 0;
+  const netRevenueMinor = Number(
+    calculateNetRevenueMinor({
+      grossMerchandiseValueMinor: BigInt(gmvMinor),
+      discountsMinor: BigInt(discountsMinor),
+      refundsMinor: BigInt(refundsMinor),
+      cancellationsMinor: BigInt(cancellationsMinor),
+    }),
+  );
+
+  const checkoutToken =
+    typeof body.checkout_token === "string" && body.checkout_token.length > 0
+      ? body.checkout_token.slice(0, 255)
+      : undefined;
+  const financialStatus =
+    typeof body.financial_status === "string"
+      ? body.financial_status.slice(0, 64)
+      : undefined;
+
+  return {
+    schemaVersion: 1,
+    shopId,
+    shopifyOrderId,
+    ...(checkoutToken ? { checkoutToken } : {}),
+    sessionId: null,
+    currency: asCurrency(body.currency),
+    gmvMinor,
+    discountsMinor,
+    refundsMinor,
+    cancellationsMinor,
+    netRevenueMinor,
+    orderedAt: asIso(body.created_at, nowIso),
+    updatedAt: asIso(body.updated_at, nowIso),
+    ...(financialStatus ? { financialStatus } : {}),
+    cancelledAt: isCancelled ? asIso(cancelledAtRaw, nowIso) : null,
+  };
+}
+
+/**
+ * Apply a refunds/create payload onto an existing order fact (idempotent max).
+ */
+export function applyShopifyRefundToOrder(
+  order: import("@pathminty/contracts").OrderFact,
+  payload: unknown,
+  nowIso: string = new Date().toISOString(),
+): import("@pathminty/contracts").OrderFact {
+  const body = readRecord(payload);
+  if (!body) return order;
+
+  let refundAdd = 0;
+  const transactions = body.transactions;
+  if (Array.isArray(transactions)) {
+    for (const tx of transactions) {
+      const record = readRecord(tx);
+      if (!record) continue;
+      refundAdd += shopifyMoneyToMinor(record.amount);
+    }
+  }
+  if (refundAdd === 0) {
+    const lineItems = body.refund_line_items;
+    if (Array.isArray(lineItems)) {
+      for (const item of lineItems) {
+        const record = readRecord(item);
+        if (!record) continue;
+        refundAdd +=
+          shopifyMoneyToMinor(record.subtotal) + shopifyMoneyToMinor(record.total_tax);
+      }
+    }
+  }
+
+  // Consumer is idempotent per webhookId; partial refunds accumulate here.
+  const refunds = Math.min(order.gmvMinor, order.refundsMinor + refundAdd);
+  const netRevenueMinor = Number(
+    calculateNetRevenueMinor({
+      grossMerchandiseValueMinor: BigInt(order.gmvMinor),
+      discountsMinor: BigInt(order.discountsMinor),
+      refundsMinor: BigInt(refunds),
+      cancellationsMinor: BigInt(order.cancellationsMinor),
+    }),
+  );
+
+  return {
+    ...order,
+    refundsMinor: refunds,
+    netRevenueMinor,
+    updatedAt: nowIso,
+  };
+}
+
+/** Prefer checkout-token match; else nearest checkout session before the order. */
+export function findSessionForOrder(
+  sessions: readonly SessionSummary[],
+  options: {
+    orderedAtMs: number;
+    checkoutToken?: string | null;
+    indexedSessionId?: string | null;
+  },
+): SessionSummary | null {
+  if (options.indexedSessionId) {
+    const exact = sessions.find((s) => s.sessionId === options.indexedSessionId);
+    if (exact) return exact;
+  }
+
+  const token = options.checkoutToken?.trim();
+  if (token) {
+    const byToken = sessions.find((session) =>
+      session.checkoutTokens?.includes(token),
+    );
+    if (byToken) return byToken;
+  }
+
+  const windowMs = 6 * 60 * 60 * 1_000;
+  let best: SessionSummary | null = null;
+  let bestDelta = Number.POSITIVE_INFINITY;
+
+  for (const session of sessions) {
+    const path = uniquePath(session);
+    if (!path.some((route) => isCheckoutRoute(route))) continue;
+    const started = Date.parse(session.startedAt);
+    const lastSeen = Date.parse(session.lastSeenAt);
+    if (!Number.isFinite(started) || !Number.isFinite(lastSeen)) continue;
+    if (started > options.orderedAtMs + 5 * 60_000) continue;
+    if (lastSeen > options.orderedAtMs + 15 * 60_000) continue;
+    if (options.orderedAtMs - lastSeen > windowMs) continue;
+    const delta = Math.abs(options.orderedAtMs - lastSeen);
+    if (delta < bestDelta) {
+      bestDelta = delta;
+      best = session;
+    }
+  }
+  return best;
+}
+
+/** Merge verified order revenue onto a session summary (preserves existing tokens). */
+export function attachOrderToSession(
+  session: SessionSummary,
+  order: import("@pathminty/contracts").OrderFact,
+): SessionSummary {
+  const tokens = new Set(session.checkoutTokens ?? []);
+  if (order.checkoutToken) tokens.add(order.checkoutToken);
+  return {
+    ...session,
+    ...(tokens.size > 0 ? { checkoutTokens: [...tokens].slice(0, 16) } : {}),
+    orderId: order.shopifyOrderId,
+    netRevenueMinor: order.netRevenueMinor,
+    currency: order.currency,
+    purchasedAt: order.orderedAt,
+  };
+}
+
+export function formatMoneyMinor(amountMinor: number, currency: string | null): string {
+  const code = currency && /^[A-Z]{3}$/u.test(currency) ? currency : "USD";
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency: code,
+      maximumFractionDigits: 2,
+    }).format(amountMinor / 100);
+  } catch {
+    return `${(amountMinor / 100).toFixed(2)} ${code}`;
+  }
 }
 
 export function normalizeStorefrontRoute(rawPath: string): string {

@@ -107,7 +107,9 @@ export function JourneyFlow({
         </span>
         <span className="journey-basis">
           Basis: {graph.conversionBasis.replaceAll("_", " ")} ·{" "}
-          {graph.checkoutSessions}/{graph.totalSessions} sessions reached checkout
+          {graph.conversionBasis === "verified_purchase"
+            ? `${graph.orderCount} orders · ${graph.checkoutSessions}/${graph.totalSessions} reached checkout`
+            : `${graph.checkoutSessions}/${graph.totalSessions} sessions reached checkout`}
         </span>
       </div>
 

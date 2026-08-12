@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  checkoutIndexKey,
+  orderFactKey,
   replayChunkKey,
   replayManifestKey,
   sessionSummaryKey,
@@ -84,6 +86,17 @@ describe("replay object keys", () => {
       ),
     ).toBe(
       "session-summaries/v1/pathminty-demo-store.myshopify.com/cb6f58ff-53e1-42d2-8ae3-8f74ac52fb6d.json",
+    );
+  });
+
+  it("partitions order facts and checkout indexes by shop", () => {
+    expect(orderFactKey("pathminty-demo-store.myshopify.com", "5678901")).toBe(
+      "orders/v1/pathminty-demo-store.myshopify.com/5678901.json",
+    );
+    expect(
+      checkoutIndexKey("pathminty-demo-store.myshopify.com", "tok/with/slash"),
+    ).toBe(
+      "checkout-index/v1/pathminty-demo-store.myshopify.com/tok%2Fwith%2Fslash.json",
     );
   });
 });

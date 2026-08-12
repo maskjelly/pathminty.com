@@ -12,6 +12,7 @@ import {
 } from "@phosphor-icons/react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
+import { formatMoneyMinor } from "../money";
 import { RouteCardPreview } from "./RouteCardPreview";
 
 /**
@@ -144,6 +145,9 @@ function placeRoutes(
         hoverWeight: 0,
         lastSeenAt: journey?.to ?? new Date().toISOString(),
         hasFullSnapshot: false,
+        netRevenueMinor: node?.netRevenueMinor ?? 0,
+        orderCount: node?.orderCount ?? 0,
+        currency: journey?.currency ?? null,
       };
       placed.push({
         route,
@@ -200,6 +204,8 @@ function buildEdgeViews(
     sessionCount: e.sessionCount,
     checkoutReachCount: e.checkoutReachCount,
     checkoutRate: e.checkoutRate,
+    orderCount: e.orderCount,
+    netRevenueMinor: e.netRevenueMinor,
     shareOfFrom: e.shareOfFrom,
     shareOfTraffic: e.shareOfTraffic,
     isPrimary: index === 0,
@@ -361,7 +367,10 @@ export function SiteCanvas({
           <span className="site-canvas-eyebrow">Customer journey</span>
           <span className="site-canvas-hint">
             Left → right = path through the store · Blue glow = busiest step · % = share
-            of entry sessions · Green = reached checkout
+            of entry sessions · Green = checkout · $ = verified order revenue on path
+            {journey && journey.orderCount > 0
+              ? ` · ${formatMoneyMinor(journey.totalNetRevenueMinor, journey.currency)} from ${journey.orderCount} order${journey.orderCount === 1 ? "" : "s"}`
+              : ""}
           </span>
         </div>
         <div className="site-canvas-tools">
@@ -589,7 +598,14 @@ export function SiteCanvas({
                     ) : (
                       <span>{shareOfEntry}%</span>
                     )}
-                    {isCheckout && checkoutPct !== null ? (
+                    {item.stat.netRevenueMinor > 0 ? (
+                      <span className="flow-card-revenue">
+                        {formatMoneyMinor(item.stat.netRevenueMinor, item.stat.currency)}
+                        {item.stat.orderCount > 0
+                          ? ` · ${item.stat.orderCount} ord.`
+                          : ""}
+                      </span>
+                    ) : isCheckout && checkoutPct !== null ? (
                       <span className="flow-card-conversion">
                         {checkoutPct}% conversion
                       </span>
@@ -629,8 +645,26 @@ export function SiteCanvas({
           <p>
             <strong>{Math.round(hoverEdge.checkoutRate * 100)}%</strong> later reached
             checkout
-            <span className="site-canvas-edge-tip-share"> (behavior, not purchase)</span>
+            <span className="site-canvas-edge-tip-share">
+              {hoverEdge.orderCount > 0
+                ? " · includes verified purchases"
+                : " (behavior, not purchase)"}
+            </span>
           </p>
+          {hoverEdge.netRevenueMinor > 0 && (
+            <p>
+              <strong>
+                {formatMoneyMinor(
+                  hoverEdge.netRevenueMinor,
+                  journey?.currency ?? null,
+                )}
+              </strong>{" "}
+              net on paths through this step
+              {hoverEdge.orderCount > 0
+                ? ` · ${hoverEdge.orderCount} order${hoverEdge.orderCount === 1 ? "" : "s"}`
+                : ""}
+            </p>
+          )}
         </div>
       )}
     </div>

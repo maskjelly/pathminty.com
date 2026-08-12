@@ -1,4 +1,6 @@
 import type {
+  CheckoutIndex,
+  OrderFact,
   ReplayBatch,
   SessionCompletedJob,
   SessionSummary,
@@ -33,6 +35,11 @@ export interface ReplayObjectStore {
   putSessionSummary(summary: SessionSummary): Promise<void>;
   getSessionSummary(shopId: string, sessionId: string): Promise<SessionSummary | null>;
   listSessionSummaries(shopId: string, limit: number): Promise<SessionSummary[]>;
+  putOrderFact(order: OrderFact): Promise<void>;
+  getOrderFact(shopId: string, shopifyOrderId: string): Promise<OrderFact | null>;
+  listOrderFacts(shopId: string, limit: number): Promise<OrderFact[]>;
+  putCheckoutIndex(index: CheckoutIndex): Promise<void>;
+  getCheckoutIndex(shopId: string, checkoutToken: string): Promise<CheckoutIndex | null>;
 }
 
 export interface SessionJobPublisher {
@@ -77,4 +84,16 @@ export function shopifyEventKey(
 ): string {
   const day = event.occurredAt.slice(0, 10);
   return `shopify-events/v1/${event.shopId}/${day}/${event.type}/${objectId}.json`;
+}
+
+export function orderFactPrefix(shopId: string): string {
+  return `orders/v1/${shopId}/`;
+}
+
+export function orderFactKey(shopId: string, shopifyOrderId: string): string {
+  return `${orderFactPrefix(shopId)}${encodeURIComponent(shopifyOrderId)}.json`;
+}
+
+export function checkoutIndexKey(shopId: string, checkoutToken: string): string {
+  return `checkout-index/v1/${shopId}/${encodeURIComponent(checkoutToken)}.json`;
 }

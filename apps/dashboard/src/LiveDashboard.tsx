@@ -40,6 +40,7 @@ import { ActivityTimeline } from "./components/ActivityTimeline";
 import { HeatmapSurface } from "./components/HeatmapSurface";
 import { ReplayViewer } from "./components/ReplayViewer";
 import { SiteCanvas } from "./components/SiteCanvas";
+import { formatMoneyMinor } from "./money";
 
 type View = "Heatmaps" | "Recordings";
 type HeatmapPane = "map" | "route";
@@ -458,9 +459,40 @@ export function LiveDashboard() {
             setView("Heatmaps");
             setSelectedRoute(null);
           }}
+          title="PathMinty"
           type="button"
+          aria-label="PathMinty home"
         >
-          <img src="/assets/pathminty-app-icon.png" alt="PathMinty" />
+          <span className="brand-mark-glyph" aria-hidden="true">
+            <svg viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <rect width="40" height="40" rx="8" fill="#0a1f17" />
+              <rect
+                x="0.75"
+                y="0.75"
+                width="38.5"
+                height="38.5"
+                rx="7.25"
+                stroke="#00ba7c"
+                strokeOpacity="0.45"
+              />
+              {/* Path trail */}
+              <path
+                d="M9 27c4.5-1 7-5.5 8.5-10.5C19 11 22 8 27 9"
+                stroke="#00ba7c"
+                strokeWidth="2.4"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              {/* Mint leaf tip */}
+              <path
+                d="M27 9c2.2 1.2 3.8 3.4 4 6.1-2.5-.4-4.5-1.8-5.5-3.8.4-1 .9-1.7 1.5-2.3Z"
+                fill="#00ba7c"
+              />
+              {/* Pulse node on path */}
+              <circle cx="17.5" cy="16.5" r="2.2" fill="#1d9bf0" />
+              <circle cx="17.5" cy="16.5" r="3.6" stroke="#1d9bf0" strokeOpacity="0.35" />
+            </svg>
+          </span>
         </button>
         <nav className="rail-nav">
           {views.map(({ label, icon: Icon }) => (
@@ -646,6 +678,22 @@ export function LiveDashboard() {
                     {routeIndex.leastActive
                       ? `${routeIndex.leastActive.eventCount} events · ≥3 sessions`
                       : "Need ≥3 sessions on a quiet route"}
+                  </span>
+                </article>
+                <article>
+                  <p>Net revenue</p>
+                  <strong>
+                    {routeIndex.orderCount > 0
+                      ? formatMoneyMinor(
+                          routeIndex.totalNetRevenueMinor,
+                          routeIndex.currency,
+                        )
+                      : "—"}
+                  </strong>
+                  <span>
+                    {routeIndex.orderCount > 0
+                      ? `${routeIndex.orderCount} verified ${routeIndex.orderCount === 1 ? "order" : "orders"} · multi-touch by route`
+                      : "Orders join after Shopify webhooks (read_orders)"}
                   </span>
                 </article>
                 <article>

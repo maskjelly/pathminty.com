@@ -9,7 +9,7 @@
   "vars": {
     "SHOPIFY_API_KEY": "62b97c0201c60add657038e08ce9ba95",
     "SHOPIFY_APP_URL": "https://pathminty-shopify-gateway-dev.pathminty-collector.workers.dev",
-    "SCOPES": "read_customer_events,read_pixels,write_pixels,write_app_proxy",
+    "SCOPES": "read_orders,read_customer_events,read_pixels,write_pixels,write_app_proxy",
     "PATHMINTY_COLLECTOR_URL": "https://pathminty-collector-dev.pathminty-collector.workers.dev",
     "PATHMINTY_DASHBOARD_URL": "https://pathminty-dashboard-dev.pathminty-collector.workers.dev",
   },

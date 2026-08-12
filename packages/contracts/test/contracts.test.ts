@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 import {
   KEEPALIVE_MAX_BODY_BYTES,
   MAX_REPLAY_BATCH_BYTES,
+  OrderFactSchema,
   ReplayBatchSchema,
   SessionSummaryJobSchema,
   ShopifyPixelEventSchema,
+  ShopifyWebhookJobSchema,
   StorefrontInstallationSchema,
 } from "../src/index";
 
@@ -151,6 +153,37 @@ describe("ReplayBatchSchema", () => {
         sequence: 3,
         isFinal: false,
         enqueuedAt: "2026-08-11T08:00:00.000Z",
+      }).success,
+    ).toBe(true);
+  });
+
+  it("accepts order facts and webhook jobs", () => {
+    expect(
+      OrderFactSchema.safeParse({
+        schemaVersion: 1,
+        shopId: validJsonBatch.shopId,
+        shopifyOrderId: "123",
+        checkoutToken: "tok",
+        sessionId: validJsonBatch.sessionId,
+        currency: "USD",
+        gmvMinor: 5_000,
+        discountsMinor: 0,
+        refundsMinor: 0,
+        cancellationsMinor: 0,
+        netRevenueMinor: 5_000,
+        orderedAt: "2026-08-11T08:00:00.000Z",
+        updatedAt: "2026-08-11T08:00:00.000Z",
+      }).success,
+    ).toBe(true);
+
+    expect(
+      ShopifyWebhookJobSchema.safeParse({
+        schemaVersion: 1,
+        webhookId: "wh-1",
+        shop: validJsonBatch.shopId,
+        topic: "ORDERS_CREATE",
+        receivedAt: "2026-08-11T08:00:00.000Z",
+        payload: { id: 1 },
       }).success,
     ).toBe(true);
   });

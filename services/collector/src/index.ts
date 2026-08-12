@@ -197,6 +197,29 @@ app.post("/v1/shopify-events", async (context) => {
     const objectId = encodeURIComponent(result.data.eventId ?? crypto.randomUUID());
     await objectStore.putShopifyEvent(result.data, objectId, bytes);
 
+    // Index checkout tokens so order webhooks can join without scanning sessions.
+    if (result.data.checkoutToken) {
+      const now = new Date().toISOString();
+      const prior = await objectStore.getCheckoutIndex(
+        result.data.shopId,
+        result.data.checkoutToken,
+      );
+      await objectStore.putCheckoutIndex({
+        schemaVersion: 1,
+        shopId: result.data.shopId,
+        checkoutToken: result.data.checkoutToken,
+        ...(prior?.sessionId ? { sessionId: prior.sessionId } : {}),
+        ...(prior?.shopifyOrderId ? { shopifyOrderId: prior.shopifyOrderId } : {}),
+        ...(result.data.clientId
+          ? { clientId: result.data.clientId }
+          : prior?.clientId
+            ? { clientId: prior.clientId }
+            : {}),
+        occurredAt: prior?.occurredAt ?? result.data.occurredAt,
+        updatedAt: now,
+      });
+    }
+
     log("info", "shopify_event_accepted", {
       requestId,
       shopId: result.data.shopId,

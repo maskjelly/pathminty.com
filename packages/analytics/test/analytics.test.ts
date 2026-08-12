@@ -4,16 +4,19 @@ import { describe, expect, it } from "vitest";
 
 import {
   assessReplayReconstruction,
+  attachOrderToSession,
   buildActivityTimeline,
   buildHeatmap,
   buildJourneyGraph,
   buildRouteIndex,
   calculateNetRevenueMinor,
   computeScrollDepth,
+  findSessionForOrder,
   isCheckoutRoute,
   normalizeClientToDocument,
   normalizeStorefrontRoute,
   orderReplayEvents,
+  parseShopifyOrderPayload,
   resolveSessionStatus,
   resolveTimePreset,
   summarizeReplayBatches,
@@ -163,6 +166,114 @@ describe("calculateNetRevenueMinor", () => {
         cancellationsMinor: 0n,
       }),
     ).toBe(0n);
+  });
+});
+
+describe("Shopify order parse + session join", () => {
+  it("parses Level-1 order fields into minor units", () => {
+    const order = parseShopifyOrderPayload("pathminty-demo-store.myshopify.com", {
+      id: 5_678_901,
+      checkout_token: "abc-token",
+      created_at: "2026-08-12T10:00:00-04:00",
+      updated_at: "2026-08-12T10:00:00-04:00",
+      currency: "usd",
+      current_total_price: "49.00",
+      current_total_discounts: "5.00",
+      cancelled_at: null,
+      financial_status: "paid",
+    });
+    expect(order).not.toBeNull();
+    expect(order?.shopifyOrderId).toBe("5678901");
+    expect(order?.checkoutToken).toBe("abc-token");
+    expect(order?.currency).toBe("USD");
+    expect(order?.gmvMinor).toBe(5_400);
+    expect(order?.discountsMinor).toBe(500);
+    expect(order?.netRevenueMinor).toBe(4_900);
+  });
+
+  it("attributes cancelled orders with zero net", () => {
+    const order = parseShopifyOrderPayload("pathminty-demo-store.myshopify.com", {
+      id: "99",
+      created_at: "2026-08-12T10:00:00.000Z",
+      updated_at: "2026-08-12T10:00:00.000Z",
+      currency: "INR",
+      current_total_price: "100.00",
+      current_total_discounts: "0.00",
+      cancelled_at: "2026-08-12T11:00:00.000Z",
+    });
+    expect(order?.cancellationsMinor).toBe(10_000);
+    expect(order?.netRevenueMinor).toBe(0);
+  });
+
+  it("joins order to checkout session by token or proximity", () => {
+    const now = Date.parse("2026-08-12T12:00:00.000Z");
+    const base = summarizeReplayBatches([rrwebBatch({ sequence: 0 })], {
+      isFinal: true,
+    });
+    const checkoutSession: SessionSummary = {
+      ...base,
+      sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      checkoutTokens: ["tok-1"],
+      routes: ["/", "/checkouts/cn/1"],
+      entryRoute: "/",
+      exitRoute: "/checkouts/cn/1",
+      startedAt: new Date(now - 60_000).toISOString(),
+      lastSeenAt: new Date(now - 5_000).toISOString(),
+      endedAt: new Date(now - 5_000).toISOString(),
+    };
+    const browseOnly: SessionSummary = {
+      ...base,
+      sessionId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      visitorId: "visitor_two",
+      routes: ["/", "/products/x"],
+      entryRoute: "/",
+      exitRoute: "/products/x",
+      startedAt: new Date(now - 50_000).toISOString(),
+      lastSeenAt: new Date(now - 4_000).toISOString(),
+      endedAt: new Date(now - 4_000).toISOString(),
+    };
+    const match = findSessionForOrder([browseOnly, checkoutSession], {
+      orderedAtMs: now,
+      checkoutToken: "tok-1",
+    });
+    expect(match?.sessionId).toBe(checkoutSession.sessionId);
+
+    const attributed = attachOrderToSession(checkoutSession, {
+      schemaVersion: 1,
+      shopId: "pathminty-demo-store.myshopify.com",
+      shopifyOrderId: "1",
+      checkoutToken: "tok-1",
+      sessionId: checkoutSession.sessionId,
+      currency: "USD",
+      gmvMinor: 5_000,
+      discountsMinor: 0,
+      refundsMinor: 0,
+      cancellationsMinor: 0,
+      netRevenueMinor: 5_000,
+      orderedAt: new Date(now).toISOString(),
+      updatedAt: new Date(now).toISOString(),
+    });
+    expect(attributed.netRevenueMinor).toBe(5_000);
+    expect(attributed.orderId).toBe("1");
+
+    const graph = buildJourneyGraph({
+      sessions: [attributed, browseOnly],
+      fromMs: now - 120_000,
+      toMs: now + 1_000,
+    });
+    expect(graph.conversionBasis).toBe("verified_purchase");
+    expect(graph.totalNetRevenueMinor).toBe(5_000);
+    expect(graph.orderCount).toBe(1);
+    const home = graph.nodes.find((n) => n.route === "/");
+    expect(home?.netRevenueMinor).toBe(5_000);
+
+    const routes = buildRouteIndex({
+      sessions: [attributed, browseOnly],
+      fromMs: now - 120_000,
+      toMs: now + 1_000,
+    });
+    expect(routes.totalNetRevenueMinor).toBe(5_000);
+    expect(routes.routes.find((r) => r.route === "/")?.netRevenueMinor).toBe(5_000);
   });
 });
 
@@ -573,6 +684,7 @@ describe("time range and route index", () => {
       sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
       routes: ["/hot"],
       entryRoute: "/hot",
+      exitRoute: "/hot",
       clicks: [
         { at: now - 1_000, route: "/hot", x: 0.2, y: 0.2 },
         { at: now - 2_000, route: "/hot", x: 0.3, y: 0.3 },
@@ -591,6 +703,7 @@ describe("time range and route index", () => {
         visitorId: `visitor_quiet_${index}`,
         routes: ["/quiet"],
         entryRoute: "/quiet",
+        exitRoute: "/quiet",
         clicks: [{ at: now - 5_000, route: "/quiet", x: 0.5, y: 0.5 }],
         startedAt: new Date(now - 20_000).toISOString(),
         lastSeenAt: new Date(now - 4_000).toISOString(),
@@ -601,6 +714,7 @@ describe("time range and route index", () => {
       sessionId: "cccccccc-cccc-4ccc-8ccc-cccccccccccc",
       routes: ["/once"],
       entryRoute: "/once",
+      exitRoute: "/once",
       clicks: [],
       startedAt: new Date(now - 8_000).toISOString(),
       lastSeenAt: new Date(now - 2_000).toISOString(),

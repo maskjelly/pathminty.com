@@ -12,13 +12,23 @@ export {
 } from "./capture-proxy";
 
 import type {
+  CheckoutIndex,
+  OrderFact,
   ReplayBatch,
   SessionCompletedJob,
   SessionSummary,
   ShopifyPixelEvent,
 } from "@pathminty/contracts";
-import { ReplayBatchSchema, SessionSummarySchema } from "@pathminty/contracts";
 import {
+  CheckoutIndexSchema,
+  OrderFactSchema,
+  ReplayBatchSchema,
+  SessionSummarySchema,
+} from "@pathminty/contracts";
+import {
+  checkoutIndexKey,
+  orderFactKey,
+  orderFactPrefix,
   replayChunkKey,
   replayManifestKey,
   replaySessionPrefix,
@@ -155,6 +165,68 @@ export class R2ReplayObjectStore implements ReplayObjectStore {
         const rightSeen = right.lastSeenAt ?? right.endedAt;
         return rightSeen.localeCompare(leftSeen);
       });
+  }
+
+  async putOrderFact(order: OrderFact): Promise<void> {
+    await this.bucket.put(orderFactKey(order.shopId, order.shopifyOrderId), JSON.stringify(order), {
+      httpMetadata: { contentType: "application/json" },
+      customMetadata: {
+        shopId: order.shopId,
+        currency: order.currency,
+        ...(order.sessionId ? { sessionId: order.sessionId } : {}),
+      },
+    });
+  }
+
+  async getOrderFact(shopId: string, shopifyOrderId: string): Promise<OrderFact | null> {
+    const object = await this.bucket.get(orderFactKey(shopId, shopifyOrderId));
+    if (!object) return null;
+    const parsed = OrderFactSchema.safeParse(await object.json<unknown>());
+    if (!parsed.success) throw new Error("Stored order fact is invalid");
+    return parsed.data;
+  }
+
+  async listOrderFacts(shopId: string, limit: number): Promise<OrderFact[]> {
+    const page = await this.bucket.list({
+      prefix: orderFactPrefix(shopId),
+      limit: Math.min(Math.max(limit, 1), 200),
+    });
+    const orders = await Promise.all(
+      page.objects.map(async (item) => {
+        const object = await this.bucket.get(item.key);
+        if (!object) return null;
+        const parsed = OrderFactSchema.safeParse(await object.json<unknown>());
+        return parsed.success ? parsed.data : null;
+      }),
+    );
+    return orders
+      .filter((order): order is OrderFact => order !== null)
+      .sort((left, right) => right.orderedAt.localeCompare(left.orderedAt));
+  }
+
+  async putCheckoutIndex(index: CheckoutIndex): Promise<void> {
+    await this.bucket.put(
+      checkoutIndexKey(index.shopId, index.checkoutToken),
+      JSON.stringify(index),
+      {
+        httpMetadata: { contentType: "application/json" },
+        customMetadata: {
+          shopId: index.shopId,
+          ...(index.sessionId ? { sessionId: index.sessionId } : {}),
+        },
+      },
+    );
+  }
+
+  async getCheckoutIndex(
+    shopId: string,
+    checkoutToken: string,
+  ): Promise<CheckoutIndex | null> {
+    const object = await this.bucket.get(checkoutIndexKey(shopId, checkoutToken));
+    if (!object) return null;
+    const parsed = CheckoutIndexSchema.safeParse(await object.json<unknown>());
+    if (!parsed.success) throw new Error("Stored checkout index is invalid");
+    return parsed.data;
   }
 }
 
