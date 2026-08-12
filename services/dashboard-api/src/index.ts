@@ -358,12 +358,29 @@ async function resolveSnapshotEvents(
   device: "all" | "desktop" | "tablet" | "mobile",
   sessions: SessionSummary[],
 ) {
-  const candidates = sessions.filter(
-    (session) =>
-      session.hasFullSnapshot &&
-      (session.routes.includes(route) || session.entryRoute === route) &&
-      (device === "all" || session.device === device),
-  );
+  const deviceRank = (value: SessionSummary["device"]) => {
+    if (value === "desktop") return 0;
+    if (value === "tablet") return 1;
+    return 2;
+  };
+
+  const candidates = sessions
+    .filter(
+      (session) =>
+        session.hasFullSnapshot &&
+        (session.routes.includes(route) || session.entryRoute === route) &&
+        (device === "all" || session.device === device),
+    )
+    // Prefer laptop/desktop viewports for previews when device filter is "all".
+    .sort((left, right) => {
+      if (device === "all") {
+        const rank = deviceRank(left.device) - deviceRank(right.device);
+        if (rank !== 0) return rank;
+        // Wider viewports first among same device class.
+        return right.viewport.width - left.viewport.width;
+      }
+      return right.viewport.width - left.viewport.width;
+    });
 
   for (const candidate of candidates) {
     try {

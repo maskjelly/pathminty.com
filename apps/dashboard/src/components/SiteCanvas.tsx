@@ -9,10 +9,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { RouteCardPreview } from "./RouteCardPreview";
 
-const CARD_W = 260;
-const CARD_H = 200;
-const GAP_X = 28;
-const GAP_Y = 28;
+/** Landscape laptop card: wide preview chrome. */
+const CARD_W = 360;
+const CARD_H = 248;
+const GAP_X = 24;
+const GAP_Y = 24;
 
 type Placed = {
   route: string;

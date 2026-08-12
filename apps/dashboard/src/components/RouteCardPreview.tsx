@@ -27,8 +27,8 @@ function toRrwebEvents(
 }
 
 /**
- * Card preview: real page snapshot scaled into a fixed frame, with exact heat
- * drawn in the same coordinate space (so clicks stay on the right elements).
+ * Landscape laptop-style card preview: scale by page width into a wide frame
+ * and crop to the top fold (desktop viewport), not a tall mobile strip.
  */
 export function RouteCardPreview({
   heatmap,
@@ -62,24 +62,37 @@ export function RouteCardPreview({
     let replayer: Replayer | null = null;
 
     try {
-      const frameW = Math.max(1, frame.clientWidth || 280);
-      const frameH = Math.max(1, frame.clientHeight || 150);
+      const frameW = Math.max(1, frame.clientWidth || 320);
+      const frameH = Math.max(1, frame.clientHeight || 180);
+
+      // Prefer desktop page width; fall back to a laptop-like width.
       const pageW = Math.max(
-        1,
+        1_024,
         heatmap.document?.width || heatmap.viewport?.width || 1_280,
       );
-      // Use full document height so heat y-coords match the reconstructed page.
       const pageH = Math.max(
         1,
         heatmap.document?.height || heatmap.viewport?.height || 900,
       );
+      // Visible "laptop fold" height for framing (not full long document).
+      const foldH = Math.max(
+        600,
+        Math.min(
+          pageH,
+          heatmap.viewport?.height && heatmap.viewport.width >= 1_024
+            ? heatmap.viewport.height
+            : Math.round(pageW * (9 / 16)),
+        ),
+      );
 
-      // Contain: entire page fits in the frame; letterbox if needed.
-      const scale = Math.min(frameW / pageW, frameH / pageH);
-      const scaledW = Math.max(1, Math.round(pageW * scale));
-      const scaledH = Math.max(1, Math.round(pageH * scale));
-      const offsetX = Math.round((frameW - scaledW) / 2);
-      const offsetY = Math.round((frameH - scaledH) / 2);
+      // Fit width to frame (landscape laptop). Crop vertically to top fold.
+      const scale = frameW / pageW;
+      const scaledW = frameW;
+      const scaledFullH = Math.round(pageH * scale);
+      const scaledFoldH = Math.round(foldH * scale);
+      // Center horizontally (flush), top-align for laptop top-of-page view.
+      const offsetX = 0;
+      const offsetY = 0;
 
       replayer = new Replayer(toRrwebEvents(heatmap.snapshotEvents), {
         root: host,
@@ -135,13 +148,16 @@ export function RouteCardPreview({
       }
 
       if (heat) {
-        drawExactHeatCompact(heat, heatmap.points, scaledW, scaledH);
+        // Heat uses full page coords; size canvas to full scaled page then clip
+        // with the frame so points stay aligned with the DOM.
+        const heatH = Math.max(scaledFoldH, Math.min(scaledFullH, Math.round(frameH)));
+        drawExactHeatCompact(heat, heatmap.points, scaledW, heatH);
         Object.assign(heat.style, {
           position: "absolute",
           left: `${offsetX}px`,
           top: `${offsetY}px`,
           width: `${scaledW}px`,
-          height: `${scaledH}px`,
+          height: `${heatH}px`,
           pointerEvents: "none",
         });
       }

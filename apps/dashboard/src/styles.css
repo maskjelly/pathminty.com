@@ -648,9 +648,13 @@ body {
 }
 .site-canvas-card-preview {
   position: relative;
-  height: 140px;
+  /* Landscape laptop fold (~16:10) */
+  height: 188px;
   overflow: hidden;
   background: #0f0f0f;
+}
+.route-card-live-preview {
+  aspect-ratio: 16 / 10;
 }
 .site-canvas-card-meta {
   padding: 6px 8px 8px;
