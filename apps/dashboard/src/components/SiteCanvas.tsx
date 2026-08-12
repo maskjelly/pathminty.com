@@ -195,7 +195,9 @@ export function SiteCanvas({
   return (
     <div className="site-canvas-shell">
       <div className="site-canvas-chrome">
-        <span>Pan · scroll to zoom · double-click a page to open heatmap</span>
+        <span className="site-canvas-eyebrow">
+          Canvas · pan · zoom · open a page
+        </span>
         <div className="site-canvas-tools">
           <button type="button" className="icon-button" onClick={() => zoomBy(1.15)} title="Zoom in">
             <MagnifyingGlassPlus size={16} />
@@ -252,9 +254,9 @@ export function SiteCanvas({
                     key={`${edge.from}->${edge.to}`}
                     d={`M ${x1} ${y1} C ${mid} ${y1}, ${mid} ${y2}, ${x2} ${y2}`}
                     fill="none"
-                    stroke={active ? "#ffb08a" : "#ff6a2b"}
+                    stroke={active ? "#000000" : "#111111"}
                     strokeWidth={stroke}
-                    strokeOpacity={0.35 + weight * 0.5}
+                    strokeOpacity={0.2 + weight * 0.55}
                     strokeLinecap="round"
                     onMouseEnter={() => setHoverEdge(edge)}
                     onMouseLeave={() => setHoverEdge(null)}

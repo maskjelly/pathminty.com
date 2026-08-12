@@ -411,15 +411,7 @@ export function LiveDashboard() {
           <img src="/assets/pathminty-app-icon.png" alt="" />
           <p className="empty-dashboard-kicker">PathMinty analytics</p>
           <h1>
-            {status === "loading" ? (
-              <>
-                Opening your <span className="lime-chip">store</span>…
-              </>
-            ) : (
-              <>
-                Dashboard <span className="lime-chip">access</span> needed
-              </>
-            )}
+            {status === "loading" ? "Opening your store…" : "Dashboard access needed"}
           </h1>
           <p>
             {status === "loading" ? "Verifying the secure Shopify handoff." : error}
