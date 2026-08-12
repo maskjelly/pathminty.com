@@ -1257,7 +1257,8 @@ body {
   font-size: 12px;
 }
 .recording-incomplete,
-.asset-warning {
+.asset-warning,
+.recording-partial-warning {
   padding: 10px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -1265,6 +1266,23 @@ body {
   background: var(--bg-elevated);
   font-size: 13px;
   line-height: 1.4;
+}
+.recording-incomplete strong {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text);
+  font-weight: 700;
+}
+.recording-incomplete-hint {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.recording-partial-warning {
+  margin: 0 0 8px;
+  border-color: rgb(29 155 240 / 35%);
+  color: var(--text-secondary);
+  background: rgb(29 155 240 / 8%);
 }
 .speed-select {
   display: flex;

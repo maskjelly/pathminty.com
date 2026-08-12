@@ -606,6 +606,28 @@ describe("replay ordering and reconstruction", () => {
       );
     }
   });
+
+  it("still plays when a batch sequence is missing (partial upload)", () => {
+    const result = assessReplayReconstruction([
+      rrwebBatch({ sequence: 0 }),
+      rrwebBatch({
+        sequence: 2,
+        batchId: "5c907c67-d57f-47aa-ac9d-e275ca730bf5",
+        payload: [
+          {
+            type: 3,
+            data: { source: 2, type: 2, id: 1, x: 10, y: 10 },
+            timestamp: 2_000,
+          },
+        ],
+      }),
+    ]);
+    expect(result.reconstruction).toBe("ready");
+    if (result.reconstruction !== "ready") {
+      throw new Error(`expected ready, got ${result.reconstruction}`);
+    }
+    expect(result.reconstructionWarning).toMatch(/missing batch 1/i);
+  });
 });
 
 describe("buildHeatmap", () => {

@@ -348,6 +348,10 @@ app.get("/v1/shops/:shopId/sessions/:sessionId", async (context) => {
     ...(reconstruction.reconstruction === "incomplete"
       ? { incompleteReason: reconstruction.incompleteReason }
       : {}),
+    ...(reconstruction.reconstruction === "ready" &&
+    reconstruction.reconstructionWarning
+      ? { reconstructionWarning: reconstruction.reconstructionWarning }
+      : {}),
   });
 });
 

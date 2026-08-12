@@ -28,6 +28,26 @@ type RecorderConfig = {
   shopId: string;
 };
 
+/** Best-effort retry after a failed flush (pagehide / navigation / brief offline). */
+const PENDING_UPLOAD_KEY = "pathminty:pendingUpload";
+
+type PendingUploadEnvelope = {
+  schemaVersion: 1;
+  shopId: string;
+  visitorId: string;
+  sessionId: string;
+  sequence: number;
+  batchId: string;
+  capturedAt: string;
+  route: string;
+  viewport: { width: number; height: number; devicePixelRatio: number };
+  document: { width: number; height: number };
+  encoding: "rrweb";
+  source: "storefront";
+  payload: unknown[];
+  isFinal: boolean;
+};
+
 type ShopifyPrivacy = {
   analyticsProcessingAllowed?: () => boolean;
 };
@@ -123,10 +143,81 @@ function captureDocumentSize(): { width: number; height: number } {
     const identity = getOrCreateSessionIdentity(storage, () => crypto.randomUUID());
     const privacy = createRrwebPrivacyOptions();
 
+    const postEnvelope = async (envelope: PendingUploadEnvelope, useKeepalive: boolean) => {
+      const body = JSON.stringify(envelope);
+      const bodyBytes = measureUtf8Bytes(body);
+      if (!isWithinHardBatchLimit(bodyBytes, DEFAULT_RECORDER_POLICY.hardBatchBytes)) {
+        setStatus("batch-too-large");
+        throw new BatchTooLargeError(
+          `Replay batch body ${bodyBytes} exceeds ${DEFAULT_RECORDER_POLICY.hardBatchBytes}`,
+        );
+      }
+      const keepalive =
+        useKeepalive &&
+        shouldUseKeepalive(bodyBytes, DEFAULT_RECORDER_POLICY.keepaliveMaxBodyBytes);
+
+      // Relative same-origin URL on the merchant storefront (app proxy).
+      // Site token is injected by the gateway — never sent from the browser.
+      const response = await fetch(config!.collectorUrl, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+        },
+        body,
+        keepalive,
+      });
+      if (!response.ok) throw new Error("Collector rejected the batch");
+    };
+
+    const clearPendingUpload = () => {
+      try {
+        storage.removeItem(PENDING_UPLOAD_KEY);
+      } catch {
+        // ignore quota / private mode
+      }
+    };
+
+    const stashPendingUpload = (envelope: PendingUploadEnvelope) => {
+      try {
+        storage.setItem(PENDING_UPLOAD_KEY, JSON.stringify(envelope));
+      } catch {
+        // sessionStorage full or blocked — best-effort only
+      }
+    };
+
+    // Retry a batch that failed on the previous document (same session).
+    // Sequence+batchId are stable so the collector remains idempotent.
+    try {
+      const rawPending = storage.getItem(PENDING_UPLOAD_KEY);
+      if (rawPending) {
+        const pending = JSON.parse(rawPending) as PendingUploadEnvelope;
+        if (
+          pending?.schemaVersion === 1 &&
+          pending.shopId === config!.shopId &&
+          pending.sessionId === identity.sessionId &&
+          typeof pending.sequence === "number" &&
+          Array.isArray(pending.payload)
+        ) {
+          void postEnvelope(pending, true)
+            .then(() => {
+              clearPendingUpload();
+              setStatus("uploaded");
+            })
+            .catch(() => {
+              setStatus("upload-error");
+            });
+        } else {
+          clearPendingUpload();
+        }
+      }
+    } catch {
+      clearPendingUpload();
+    }
+
     const uploader = createBatchUploader(
       {
         async send(batch) {
-          const body = JSON.stringify({
+          const envelope: PendingUploadEnvelope = {
             schemaVersion: 1,
             batchId: batch.batchId,
             shopId: config!.shopId,
@@ -147,37 +238,20 @@ function captureDocumentSize(): { width: number; height: number } {
             document: captureDocumentSize(),
             encoding: "rrweb",
             source: "storefront",
-            payload: batch.events,
+            payload: [...batch.events],
             isFinal: batch.final,
-          });
+          };
 
-          const bodyBytes = measureUtf8Bytes(body);
-          if (
-            !isWithinHardBatchLimit(bodyBytes, DEFAULT_RECORDER_POLICY.hardBatchBytes)
-          ) {
-            setStatus("batch-too-large");
-            throw new BatchTooLargeError(
-              `Replay batch body ${bodyBytes} exceeds ${DEFAULT_RECORDER_POLICY.hardBatchBytes}`,
-            );
+          try {
+            await postEnvelope(envelope, true);
+            clearPendingUpload();
+            setStatus("uploaded");
+          } catch (error) {
+            if (!(error instanceof BatchTooLargeError)) {
+              stashPendingUpload(envelope);
+            }
+            throw error;
           }
-
-          const keepalive = shouldUseKeepalive(
-            bodyBytes,
-            DEFAULT_RECORDER_POLICY.keepaliveMaxBodyBytes,
-          );
-
-          // Relative same-origin URL on the merchant storefront (app proxy).
-          // Site token is injected by the gateway — never sent from the browser.
-          const response = await fetch(config!.collectorUrl, {
-            method: "POST",
-            headers: {
-              "content-type": "application/json",
-            },
-            body,
-            keepalive,
-          });
-          if (!response.ok) throw new Error("Collector rejected the batch");
-          setStatus("uploaded");
         },
       },
       {
@@ -226,9 +300,21 @@ function captureDocumentSize(): { width: number; height: number } {
       setStatus("session-duration-cap");
     }, DEFAULT_RECORDER_POLICY.maxSessionDurationMs);
 
+    // Flush early when the tab is backgrounded — more reliable than pagehide alone
+    // when shoppers hop to cart/checkout.
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") {
+        void uploader.flush(false).catch(() => {
+          setStatus("upload-error");
+        });
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
     const onPageHide = () => {
       window.clearInterval(interval);
       window.clearTimeout(sessionDeadline);
+      document.removeEventListener("visibilitychange", onVisibility);
       void uploader.flush(true).catch(() => {
         setStatus("upload-error");
       });
@@ -240,6 +326,7 @@ function captureDocumentSize(): { width: number; height: number } {
       started = false;
       window.clearInterval(interval);
       window.clearTimeout(sessionDeadline);
+      document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("pagehide", onPageHide);
       if (typeof stopRecording === "function") stopRecording();
     };

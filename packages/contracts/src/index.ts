@@ -242,6 +242,8 @@ export const ReplaySessionResponseSchema = z
     batches: z.array(ReplayBatchSchema),
     reconstruction: z.enum(["ready", "incomplete"]),
     incompleteReason: z.string().min(1).max(500).optional(),
+    /** Soft notice when playable but some batches were lost (e.g. checkout navigation). */
+    reconstructionWarning: z.string().min(1).max(500).optional(),
   })
   .strict();
 

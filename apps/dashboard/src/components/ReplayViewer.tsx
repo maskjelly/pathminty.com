@@ -193,6 +193,11 @@ export function ReplayViewer({
               {replay.incompleteReason ??
                 "This session cannot be reconstructed from the stored batches."}
             </p>
+            <p className="recording-incomplete-hint">
+              Common causes: ad blockers, leaving mid-page for checkout, or a flush that
+              did not finish before navigation. Heatmaps and the site canvas still use
+              any events that did arrive.
+            </p>
           </div>
         ) : rrwebEvents.length < 2 ? (
           <div className="recording-incomplete" role="alert">
@@ -210,6 +215,11 @@ export function ReplayViewer({
               </span>
               <span data-status={replay.summary.status}>{replay.summary.status}</span>
             </div>
+            {replay.reconstructionWarning && (
+              <p className="recording-partial-warning" role="status">
+                {replay.reconstructionWarning}
+              </p>
+            )}
             <div className="replay-player-shell" ref={mountRef} />
             {assetWarning && (
               <p className="asset-warning" role="status">

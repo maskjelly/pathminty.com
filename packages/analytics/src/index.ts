@@ -1202,9 +1202,16 @@ export function orderReplayEvents(batches: readonly ReplayBatch[]): RrwebEvent[]
 }
 
 export type ReplayReconstruction =
-  | { reconstruction: "ready" }
+  | { reconstruction: "ready"; reconstructionWarning?: string }
   | { reconstruction: "incomplete"; incompleteReason: string };
 
+/**
+ * Decide whether a stored session can be played in rrweb-player.
+ *
+ * Sequence gaps (lost pagehide flushes, checkout navigations, adblock) must not
+ * block playback when Meta + FullSnapshot are present — the timeline is partial
+ * but still useful. Gaps surface as a soft warning for the merchant UI.
+ */
 export function assessReplayReconstruction(
   batches: readonly ReplayBatch[],
 ): ReplayReconstruction {
@@ -1236,18 +1243,24 @@ export function assessReplayReconstruction(
     };
   }
 
+  const missingSequences: number[] = [];
   for (let index = 1; index < ordered.length; index += 1) {
     const previous = ordered[index - 1];
     const current = ordered[index];
     if (!previous || !current) continue;
-    if (current.sequence > previous.sequence + 1) {
-      return {
-        reconstruction: "incomplete",
-        incompleteReason: `Recording incomplete: missing batch sequence ${
-          previous.sequence + 1
-        } (gap before ${current.sequence}).`,
-      };
+    for (let seq = previous.sequence + 1; seq < current.sequence; seq += 1) {
+      missingSequences.push(seq);
     }
+  }
+
+  if (missingSequences.length > 0) {
+    const preview = missingSequences.slice(0, 6).join(", ");
+    const more =
+      missingSequences.length > 6 ? ` (+${missingSequences.length - 6} more)` : "";
+    return {
+      reconstruction: "ready",
+      reconstructionWarning: `Some moments were not uploaded (missing batch ${preview}${more}). Playback continues with the segments we have — gaps are common when shoppers leave for checkout or a network flush is interrupted.`,
+    };
   }
 
   return { reconstruction: "ready" };
