@@ -9,10 +9,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { RouteCardPreview } from "./RouteCardPreview";
 
-const CARD_W = 280;
-const CARD_H = 220;
-const GAP_X = 64;
-const GAP_Y = 72;
+const CARD_W = 260;
+const CARD_H = 200;
+const GAP_X = 28;
+const GAP_Y = 28;
 
 type Placed = {
   route: string;
@@ -254,9 +254,9 @@ export function SiteCanvas({
                     key={`${edge.from}->${edge.to}`}
                     d={`M ${x1} ${y1} C ${mid} ${y1}, ${mid} ${y2}, ${x2} ${y2}`}
                     fill="none"
-                    stroke={active ? "#000000" : "#111111"}
+                    stroke={active ? "#1d9bf0" : "#536471"}
                     strokeWidth={stroke}
-                    strokeOpacity={0.2 + weight * 0.55}
+                    strokeOpacity={0.35 + weight * 0.55}
                     strokeLinecap="round"
                     onMouseEnter={() => setHoverEdge(edge)}
                     onMouseLeave={() => setHoverEdge(null)}
