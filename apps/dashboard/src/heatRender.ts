@@ -13,15 +13,6 @@ const ATTENTION_MAP: HeatColormap = [
   { t: 1, c: [250, 204, 21, 0.72] },
 ];
 
-const CLICK_MAP: HeatColormap = [
-  { t: 0, c: [0, 0, 0, 0] },
-  { t: 0.1, c: [250, 204, 21, 0.18] },
-  { t: 0.32, c: [249, 115, 22, 0.4] },
-  { t: 0.55, c: [239, 68, 68, 0.58] },
-  { t: 0.78, c: [220, 38, 38, 0.72] },
-  { t: 1, c: [127, 29, 29, 0.86] },
-];
-
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
 }
@@ -146,16 +137,7 @@ export function drawHeatForMode(
     drawExactHeatCompact(canvas, points, width, height);
     return;
   }
-  drawTopographicHeat(canvas, points, width, height, {
-    gridWidth: 110,
-    splatRadius: 5,
-    blurPasses: 2,
-    blurRadius: 1,
-    contours: false,
-    colormap: CLICK_MAP,
-  });
-  // Crisp click cores so clusters stay locatable.
-  drawExactHeat(canvas, points, width, height, { additive: true, scale: 0.72 });
+  drawExactHeat(canvas, points, width, height);
 }
 
 export function heatBlendMode(mode: HeatmapMode): string {

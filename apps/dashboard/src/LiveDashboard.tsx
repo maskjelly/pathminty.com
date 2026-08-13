@@ -175,6 +175,9 @@ export function LiveDashboard() {
   const [miniHeatmaps, setMiniHeatmaps] = useState<Record<string, HeatmapResponse>>({});
   const [device, setDevice] = useState<DashboardDevice>("all");
   const [heatmapMode, setHeatmapMode] = useState<HeatmapMode>("click");
+  useEffect(() => {
+    if (heatmapMode === "scroll") setHeatmapMode("click");
+  }, [heatmapMode]);
   const [timePreset, setTimePreset] = useState<TimeRangePreset>("24h");
   const [routeSort, setRouteSort] = useState<RouteSort>("most_active");
   const [routeQuery, setRouteQuery] = useState("");
@@ -662,13 +665,6 @@ export function LiveDashboard() {
                   type="button"
                 >
                   Hover
-                </button>
-                <button
-                  data-active={heatmapMode === "scroll"}
-                  onClick={() => setHeatmapMode("scroll")}
-                  type="button"
-                >
-                  Scroll
                 </button>
               </div>
               <div className="device-switch" aria-label="Device">

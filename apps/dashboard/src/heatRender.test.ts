@@ -1,12 +1,19 @@
 import { describe, expect, it } from "vitest";
 
+import { clickShouldBloom } from "./exactHeat";
 import { drawHeatForMode, heatLegend } from "./heatRender";
 
 describe("heatRender", () => {
   it("labels each mode distinctly", () => {
     expect(heatLegend("hover").to).toBe("Dwell");
-    expect(heatLegend("scroll").from).toBe("Nobody");
     expect(heatLegend("click").to).toMatch(/clicks/i);
+  });
+
+  it("blooms clicks only when a spot has volume", () => {
+    expect(clickShouldBloom(1, 1)).toBe(false);
+    expect(clickShouldBloom(2, 3)).toBe(false);
+    expect(clickShouldBloom(4, 4)).toBe(true);
+    expect(clickShouldBloom(5, 10)).toBe(true);
   });
 
   it("draws without throwing when canvas is unavailable", () => {
