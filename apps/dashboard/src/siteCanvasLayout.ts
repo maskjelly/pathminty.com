@@ -65,6 +65,7 @@ export function storefrontPath(route: string): string {
 
 /** Store homepage, including Shopify Markets locale roots like /en-us. */
 export function isHomeRoute(route: string): boolean {
+  if (typeof route !== "string" || route.length === 0) return false;
   const r = storefrontPath(route).toLowerCase();
   return (
     r === "/" ||

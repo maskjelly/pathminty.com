@@ -114,7 +114,7 @@ function shopLabel(shopId: string) {
 function sessionTouchesHome(session: SessionSummary) {
   return (
     isHomeRoute(session.entryRoute) ||
-    session.routes.some((route) => isHomeRoute(route))
+    (session.routes ?? []).some((route) => isHomeRoute(route))
   );
 }
 
@@ -238,6 +238,33 @@ export function LiveDashboard() {
 
   const timeQuery = useMemo<TimeQuery>(() => ({ preset: timePreset }), [timePreset]);
   const heatmapPane: HeatmapPane = selectedRoute ? "route" : "map";
+
+  const recordingSessions = useMemo(() => {
+    const matched = sessions.filter((session) => {
+      if (pageFilter === "all") return true;
+      if (pageFilter === "home") return sessionTouchesHome(session);
+      return (
+        session.entryRoute === pageFilter || (session.routes ?? []).includes(pageFilter)
+      );
+    });
+    return [...matched].sort((left, right) => {
+      const leftHome = sessionTouchesHome(left);
+      const rightHome = sessionTouchesHome(right);
+      if (leftHome !== rightHome) return leftHome ? -1 : 1;
+      return 0;
+    });
+  }, [pageFilter, sessions]);
+
+  const recordingPages = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const session of sessions) {
+      counts.set(session.entryRoute, (counts.get(session.entryRoute) ?? 0) + 1);
+    }
+    const rest = [...counts.keys()]
+      .filter((route) => !isHomeRoute(route))
+      .sort((left, right) => (counts.get(right) ?? 0) - (counts.get(left) ?? 0));
+    return { rest: rest.slice(0, 6) };
+  }, [sessions]);
 
   const loadSessions = useCallback(
     async (shop: string) => {
@@ -555,31 +582,6 @@ export function LiveDashboard() {
     }
     void loadSiteMap(shopId);
   };
-
-  const recordingSessions = useMemo(() => {
-    const matched = sessions.filter((session) => {
-      if (pageFilter === "all") return true;
-      if (pageFilter === "home") return sessionTouchesHome(session);
-      return session.entryRoute === pageFilter || session.routes.includes(pageFilter);
-    });
-    return [...matched].sort((left, right) => {
-      const leftHome = sessionTouchesHome(left);
-      const rightHome = sessionTouchesHome(right);
-      if (leftHome !== rightHome) return leftHome ? -1 : 1;
-      return 0;
-    });
-  }, [pageFilter, sessions]);
-
-  const recordingPages = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const session of sessions) {
-      counts.set(session.entryRoute, (counts.get(session.entryRoute) ?? 0) + 1);
-    }
-    const rest = [...counts.keys()]
-      .filter((route) => !isHomeRoute(route))
-      .sort((left, right) => (counts.get(right) ?? 0) - (counts.get(left) ?? 0));
-    return { rest: rest.slice(0, 6) };
-  }, [sessions]);
 
   const activeCount = sessions.filter((session) => session.status === "active").length;
   const dataStatus =
