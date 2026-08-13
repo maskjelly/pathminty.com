@@ -31,7 +31,6 @@ import {
   getActivity,
   getDashboardShop,
   getHeatmap,
-  getHeatmapBatch,
   getJourneys,
   getReplay,
   getRoutes,
@@ -172,7 +171,6 @@ export function LiveDashboard() {
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [routeIndex, setRouteIndex] = useState<RouteListResponse | null>(null);
   const [activity, setActivity] = useState<ActivityTimelineResponse | null>(null);
-  const [miniHeatmaps, setMiniHeatmaps] = useState<Record<string, HeatmapResponse>>({});
   const [device, setDevice] = useState<DashboardDevice>("all");
   const [heatmapMode, setHeatmapMode] = useState<HeatmapMode>("click");
   const [timePreset, setTimePreset] = useState<TimeRangePreset>("24h");
@@ -245,23 +243,6 @@ export function LiveDashboard() {
         setRouteIndex(routes);
         setActivity(timeline);
         setJourney(graph);
-
-        const paths = routes.routes.map((item) => item.route);
-        if (paths.length > 0) {
-          const batch = await getHeatmapBatch(shop, {
-            routes: paths,
-            device,
-            mode: heatmapMode,
-            time: timeQuery,
-            snapshot: true,
-            snapshotLimit: 12,
-          });
-          const next: Record<string, HeatmapResponse> = {};
-          for (const item of batch) next[item.route] = item;
-          setMiniHeatmaps(next);
-        } else {
-          setMiniHeatmaps({});
-        }
         setError("");
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "Unable to load site map.");
@@ -832,7 +813,6 @@ export function LiveDashboard() {
                   <>
                     <SiteCanvas
                       routes={routeIndex?.routes ?? []}
-                      heatmaps={miniHeatmaps}
                       journey={journey}
                       onOpenRoute={setSelectedRoute}
                     />
