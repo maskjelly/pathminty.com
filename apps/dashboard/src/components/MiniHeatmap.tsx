@@ -1,14 +1,16 @@
-import type { HeatmapPoint } from "@pathminty/contracts";
+import type { HeatmapMode, HeatmapPoint } from "@pathminty/contracts";
 import { useEffect, useRef } from "react";
 
-import { drawExactHeatCompact } from "../exactHeat";
+import { drawHeatForMode } from "../heatRender";
 
-/** Fallback card heat when no DOM snapshot is available — exact points only. */
+/** Fallback card heat when no DOM snapshot is available. */
 export function MiniHeatmap({
   points,
+  mode = "click",
   className,
 }: {
   points: readonly HeatmapPoint[];
+  mode?: HeatmapMode;
   className?: string;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -31,10 +33,10 @@ export function MiniHeatmap({
     context.fillRect(16, 64, (width - 32) * 0.62, 10);
     if (points.length > 0) {
       const heat = document.createElement("canvas");
-      drawExactHeatCompact(heat, points, width, height);
+      drawHeatForMode(heat, [...points], width, height, mode, { compact: true });
       context.drawImage(heat, 0, 0);
     }
-  }, [points]);
+  }, [mode, points]);
 
   return (
     <canvas

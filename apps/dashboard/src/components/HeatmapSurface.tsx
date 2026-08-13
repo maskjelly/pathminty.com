@@ -1,14 +1,9 @@
-import type {
-  DocumentSize,
-  HeatmapPoint,
-  HeatmapResponse,
-  RrwebEvent,
-} from "@pathminty/contracts";
+import type { DocumentSize, HeatmapResponse, RrwebEvent } from "@pathminty/contracts";
 import { useEffect, useRef } from "react";
 import { Replayer, type eventWithTime } from "rrweb";
 import "rrweb/dist/style.css";
 
-import { drawExactHeat } from "../exactHeat";
+import { drawHeatForMode, heatBlendMode, heatLegend } from "../heatRender";
 import {
   computeHeatmapDisplayLayout,
   heatmapRrwebWrapperPinStyles,
@@ -16,12 +11,12 @@ import {
 
 function drawHeatLayer(
   canvas: HTMLCanvasElement,
-  points: readonly HeatmapPoint[],
+  heatmap: HeatmapResponse,
   width: number,
   height: number,
 ) {
-  // Exact click/hover positions — not a smeared density field.
-  drawExactHeat(canvas, points, width, height);
+  drawHeatForMode(canvas, [...heatmap.points], width, height, heatmap.mode);
+  canvas.style.mixBlendMode = heatBlendMode(heatmap.mode);
 }
 
 function toRrwebEvents(events: readonly RrwebEvent[]): eventWithTime[] {
@@ -173,12 +168,7 @@ export function HeatmapSurface({
     if (!canvas || !heatmap || heatmap.status !== "ok") return;
     if (layoutRef.current.width <= 0 || layoutRef.current.height <= 0) return;
 
-    drawHeatLayer(
-      canvas,
-      heatmap.points,
-      layoutRef.current.width,
-      layoutRef.current.height,
-    );
+    drawHeatLayer(canvas, heatmap, layoutRef.current.width, layoutRef.current.height);
   }, [heatmap]);
 
   if (loading) {
@@ -229,7 +219,12 @@ export function HeatmapSurface({
         </div>
         <div className="heatmap-footer">
           <p>
-            {heatmap.eventCount} {heatmap.mode === "click" ? "clicks" : "hover samples"}{" "}
+            {heatmap.eventCount}{" "}
+            {heatmap.mode === "click"
+              ? "clicks"
+              : heatmap.mode === "scroll"
+                ? "scroll samples"
+                : "attention samples"}{" "}
             · {heatmap.sessionCount} sessions
             {heatmap.document
               ? ` · document ${heatmap.document.width}×${heatmap.document.height}`
@@ -259,20 +254,25 @@ export function HeatmapSurface({
             layoutRef.current = size;
             const canvas = canvasRef.current;
             if (!canvas || size.width <= 0 || size.height <= 0) return;
-            drawHeatLayer(canvas, heatmap.points, size.width, size.height);
+            drawHeatLayer(canvas, heatmap, size.width, size.height);
           }}
         />
         <canvas aria-hidden="true" className="heatmap-canvas" ref={canvasRef} />
       </div>
       <div className="heatmap-footer">
-        <div className="heatmap-legend" aria-label="Click intensity">
-          <span>Fewer</span>
+        <div className="heatmap-legend" aria-label="Intensity" data-mode={heatmap.mode}>
+          <span>{heatLegend(heatmap.mode).from}</span>
           <i />
-          <span>More clicks</span>
+          <span>{heatLegend(heatmap.mode).to}</span>
         </div>
         <p>
-          {heatmap.eventCount} {heatmap.mode === "click" ? "clicks" : "hover samples"} ·{" "}
-          {heatmap.sessionCount} sessions
+          {heatmap.eventCount}{" "}
+          {heatmap.mode === "click"
+            ? "clicks"
+            : heatmap.mode === "scroll"
+              ? "scroll samples"
+              : "attention samples"}{" "}
+          · {heatmap.sessionCount} sessions
           {heatmap.document
             ? ` · page ${heatmap.document.width}×${heatmap.document.height}`
             : ""}

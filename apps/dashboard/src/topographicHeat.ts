@@ -7,8 +7,10 @@ import type { HeatmapPoint } from "@pathminty/contracts";
 
 type Rgba = readonly [number, number, number, number];
 
+export type HeatColormap = ReadonlyArray<{ t: number; c: Rgba }>;
+
 /** Cool → warm → hot (readable over light storefront pages). */
-const COLORMAP: ReadonlyArray<{ t: number; c: Rgba }> = [
+const COLORMAP: HeatColormap = [
   { t: 0, c: [0, 0, 0, 0] },
   { t: 0.08, c: [59, 130, 246, 0.12] },
   { t: 0.22, c: [34, 197, 94, 0.28] },
@@ -22,11 +24,11 @@ function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
 }
 
-function sampleColormap(t: number): Rgba {
+function sampleColormap(t: number, map: HeatColormap = COLORMAP): Rgba {
   const x = Math.min(1, Math.max(0, t));
-  for (let i = 1; i < COLORMAP.length; i += 1) {
-    const left = COLORMAP[i - 1];
-    const right = COLORMAP[i];
+  for (let i = 1; i < map.length; i += 1) {
+    const left = map[i - 1];
+    const right = map[i];
     if (!left || !right) continue;
     if (x <= right.t) {
       const local = (x - left.t) / Math.max(1e-6, right.t - left.t);
@@ -38,7 +40,7 @@ function sampleColormap(t: number): Rgba {
       ];
     }
   }
-  return COLORMAP.at(-1)?.c ?? [0, 0, 0, 0];
+  return map.at(-1)?.c ?? [0, 0, 0, 0];
 }
 
 /** Separable box blur (approx Gaussian when repeated). */
@@ -118,6 +120,7 @@ export type TopographicHeatOptions = {
   splatRadius?: number;
   /** Draw faint iso-lines for topo feel. */
   contours?: boolean;
+  colormap?: HeatColormap;
 };
 
 /**
@@ -183,7 +186,7 @@ export function drawTopographicHeat(
       // Gamma for punchier hot spots
       const t = Math.pow(value, 0.72);
       if (t < 0.02) continue;
-      const [r, g, b, a] = sampleColormap(t);
+      const [r, g, b, a] = sampleColormap(t, options.colormap);
       const index = (y * w + x) * 4;
       data[index] = r;
       data[index + 1] = g;

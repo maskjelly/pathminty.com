@@ -155,7 +155,7 @@ export function SiteCanvas({
   const onPointerDown = (event: React.PointerEvent) => {
     if (event.button !== 0) return;
     const target = event.target as HTMLElement;
-    if (target.closest(".figma-frame") || target.closest(".figma-source")) return;
+    if (target.closest(".figma-artboard") || target.closest(".figma-source")) return;
     drag.current = {
       active: true,
       startX: event.clientX,
@@ -191,10 +191,10 @@ export function SiteCanvas({
         <div className="site-canvas-legend">
           <span className="site-canvas-eyebrow">Store canvas</span>
           <span className="site-canvas-hint">
-            Scroll to pan · pinch / ⌘+scroll to zoom · double-click a page to zoom in ·
-            lines are shoppers moving between pages
+            Pan to move. Pinch or ⌘-scroll to zoom. Double-click a page to inspect it.
+            Numbers on lines are shoppers.
             {journey
-              ? ` · ${journey.checkoutSessions}/${journey.totalSessions} reached cart or checkout`
+              ? ` ${journey.checkoutSessions}/${journey.totalSessions} reached cart or checkout.`
               : ""}
           </span>
         </div>
@@ -263,12 +263,12 @@ export function SiteCanvas({
           >
             <defs>
               <pattern
-                height="32"
+                height="20"
                 id="figma-dots"
                 patternUnits="userSpaceOnUse"
-                width="32"
+                width="20"
               >
-                <circle cx="1" cy="1" fill="#2a2e33" r="1" />
+                <circle cx="1" cy="1" fill="#3a3a3a" r="0.7" />
               </pattern>
             </defs>
             <rect fill="url(#figma-dots)" height={worldH} width={worldW} />
@@ -325,8 +325,8 @@ export function SiteCanvas({
                     fill="#0b0d10"
                     height="22"
                     rx="11"
-                    width={Math.max(46, 18 + String(edge.sessionCount).length * 10)}
-                    x={midX - 23}
+                    width={Math.max(72, 36 + String(edge.sessionCount).length * 8)}
+                    x={midX - 36}
                     y={midY - 11}
                   />
                   <text
@@ -335,7 +335,7 @@ export function SiteCanvas({
                     x={midX}
                     y={midY + 4}
                   >
-                    {edge.sessionCount}
+                    {edge.sessionCount} people
                   </text>
                 </g>
               );
@@ -353,9 +353,10 @@ export function SiteCanvas({
                 height: SOURCE_H,
               }}
             >
+              <em>Source</em>
               <strong>{source.label}</strong>
               <small>
-                {source.sessionCount} in · {source.detail}
+                {source.sessionCount} shoppers · {source.detail}
               </small>
             </article>
           ))}
@@ -370,20 +371,26 @@ export function SiteCanvas({
               hoverEdge?.to === frame.route;
             return (
               <article
-                className="figma-frame"
+                className="figma-artboard"
                 data-on={highlighted ? "true" : "false"}
                 key={frame.route}
                 onClick={() => setSelectedRoute(frame.route)}
                 onDoubleClick={() => zoomToFrame(frame)}
                 onMouseEnter={() => setHoverRoute(frame.route)}
                 onMouseLeave={() => setHoverRoute(null)}
-                style={{ left: frame.x, top: frame.y, width: FRAME_W, height: FRAME_H }}
+                style={{
+                  left: frame.x,
+                  top: frame.y - 28,
+                  width: FRAME_W,
+                  height: FRAME_H + 28,
+                }}
               >
-                <header className="figma-frame-bar">
-                  <span title={frame.route}>
-                    <strong>{frame.label}</strong>
-                    <small>{shortPath(frame.route)}</small>
-                  </span>
+                <header className="figma-artboard-label" title={frame.route}>
+                  <strong>{frame.label}</strong>
+                  <small>
+                    {shortPath(frame.route)} · {frame.sessionCount}{" "}
+                    {frame.sessionCount === 1 ? "session" : "sessions"}
+                  </small>
                   <button
                     onClick={(event) => {
                       event.stopPropagation();
@@ -394,16 +401,9 @@ export function SiteCanvas({
                     Open
                   </button>
                 </header>
-                <div className="figma-frame-stage">
+                <div className="figma-frame">
                   <RouteCardPreview active={Boolean(heat)} heatmap={heat} />
                 </div>
-                <footer className="figma-frame-meta">
-                  {frame.sessionCount}{" "}
-                  {frame.sessionCount === 1 ? "session" : "sessions"}
-                  {frame.checkoutRate !== null
-                    ? ` · ${Math.round(frame.checkoutRate * 100)}% reached checkout`
-                    : ""}
-                </footer>
               </article>
             );
           })}

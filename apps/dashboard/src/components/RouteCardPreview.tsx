@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { Replayer, type eventWithTime } from "rrweb";
 import "rrweb/dist/style.css";
 
-import { drawExactHeatCompact } from "../exactHeat";
+import { drawHeatForMode, heatBlendMode } from "../heatRender";
 import {
   computeHeatmapDisplayLayout,
   heatmapRrwebWrapperPinStyles,
@@ -159,11 +159,13 @@ export function RouteCardPreview({
 
       if (heat) {
         // SAME pixel size as the scaled page — points use full document 0–1.
-        drawExactHeatCompact(
+        drawHeatForMode(
           heat,
-          heatmap.points,
+          [...heatmap.points],
           layout.displayWidth,
           layout.displayHeight,
+          heatmap.mode,
+          { compact: true },
         );
         Object.assign(heat.style, {
           position: "absolute",
@@ -174,6 +176,7 @@ export function RouteCardPreview({
           margin: "0",
           pointerEvents: "none",
           zIndex: "2",
+          mixBlendMode: heatBlendMode(heatmap.mode),
         });
       }
 
@@ -199,7 +202,13 @@ export function RouteCardPreview({
   }
 
   if (!hasSnapshot) {
-    return <MiniHeatmap points={heatmap.points} className="route-card-mini" />;
+    return (
+      <MiniHeatmap
+        className="route-card-mini"
+        mode={heatmap.mode}
+        points={heatmap.points}
+      />
+    );
   }
 
   return (
