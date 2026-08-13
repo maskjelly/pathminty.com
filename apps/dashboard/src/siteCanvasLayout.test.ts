@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import type { JourneyGraphResponse, RouteStat } from "@pathminty/contracts";
 
 import {
+  FRAME_H,
+  FRAME_W,
   buildFlowEdges,
   classifyRoute,
   placeFrames,
@@ -143,6 +145,14 @@ describe("figma frame layout", () => {
     expect(picked).toContain("/");
     expect(picked).toContain("/cart");
     expect(picked.length).toBeLessThanOrEqual(16);
+  });
+
+  it("uses a desktop website viewport, not a card thumbnail", () => {
+    const frames = placeFrames([stat("/", 10)], journey);
+    expect(frames[0]).toMatchObject({ x: 280 });
+    expect(frames[0]?.y).toBeGreaterThan(0);
+    expect(FRAME_W).toBeGreaterThanOrEqual(900);
+    expect(FRAME_H).toBeGreaterThanOrEqual(600);
   });
 
   it("lays page frames left to right through the store", () => {

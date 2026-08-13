@@ -68,6 +68,29 @@ const TIME_PRESETS: Array<{ id: TimeRangePreset; label: string }> = [
 const POLL_MS = 15_000;
 const SITE_MAP_PAGE = 24;
 
+function mergeHeatmaps(
+  previous: Record<string, HeatmapResponse>,
+  batch: HeatmapResponse[],
+  replaceSnapshots: boolean,
+): Record<string, HeatmapResponse> {
+  const next = { ...previous };
+  for (const item of batch) {
+    const existing = previous[item.route];
+    if (!replaceSnapshots && existing?.snapshotEvents) {
+      next[item.route] = {
+        ...item,
+        snapshotEvents: existing.snapshotEvents,
+        document: existing.document,
+        viewport: existing.viewport,
+        status: existing.snapshotEvents.length >= 2 ? "ok" : item.status,
+      };
+    } else {
+      next[item.route] = item;
+    }
+  }
+  return next;
+}
+
 function durationLabel(durationMs: number) {
   const seconds = Math.max(0, Math.round(durationMs / 1_000));
   const minutes = Math.floor(seconds / 60);
@@ -197,6 +220,7 @@ export function LiveDashboard() {
   const [planBusy, setPlanBusy] = useState(false);
   const [canvasScale, setCanvasScale] = useState(0.35);
   const canvasRef = useRef<SiteCanvasHandle | null>(null);
+  const lastHeatMode = useRef<HeatmapMode>(heatmapMode);
   const [hasTicket] = useState(() => {
     const search = new URLSearchParams(window.location.search);
     const fragment = new URLSearchParams(window.location.hash.slice(1));
@@ -260,9 +284,7 @@ export function LiveDashboard() {
             snapshot: true,
             snapshotLimit: 12,
           });
-          const next: Record<string, HeatmapResponse> = {};
-          for (const item of batch) next[item.route] = item;
-          setMiniHeatmaps(next);
+          setMiniHeatmaps((previous) => mergeHeatmaps(previous, batch, true));
         } else {
           setMiniHeatmaps({});
         }
@@ -273,7 +295,27 @@ export function LiveDashboard() {
         setMapLoading(false);
       }
     },
-    [timeQuery, device, heatmapMode, routeSort, routeLimit, routeQuery],
+    [timeQuery, device, routeSort, routeLimit, routeQuery],
+  );
+
+  const loadHeatMode = useCallback(
+    async (shop: string, mode: HeatmapMode) => {
+      const paths = routeIndex?.routes.map((item) => item.route) ?? [];
+      if (paths.length === 0) return;
+      try {
+        const batch = await getHeatmapBatch(shop, {
+          routes: paths,
+          device,
+          mode,
+          time: timeQuery,
+          snapshot: false,
+        });
+        setMiniHeatmaps((previous) => mergeHeatmaps(previous, batch, false));
+      } catch {
+        // Keep the last overlay if a mode refresh fails.
+      }
+    },
+    [device, routeIndex?.routes, timeQuery],
   );
 
   // Route-scoped timeline while drilling into a page heatmap.
@@ -347,6 +389,13 @@ export function LiveDashboard() {
     if (!shopId || view !== "Heatmaps") return;
     void loadSiteMap(shopId);
   }, [shopId, view, loadSiteMap]);
+
+  useEffect(() => {
+    if (!shopId || view !== "Heatmaps") return;
+    if (lastHeatMode.current === heatmapMode) return;
+    lastHeatMode.current = heatmapMode;
+    void loadHeatMode(shopId, heatmapMode);
+  }, [heatmapMode, loadHeatMode, shopId, view]);
 
   // Sessions for recordings tab (and manual refresh).
   useEffect(() => {

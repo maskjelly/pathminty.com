@@ -1,5 +1,5 @@
 import type { HeatmapResponse, RrwebEvent } from "@pathminty/contracts";
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { Replayer, type eventWithTime } from "rrweb";
 import "rrweb/dist/style.css";
 
@@ -46,11 +46,10 @@ function metaViewport(events: readonly RrwebEvent[]): {
 }
 
 /**
- * Card preview: same scale + origin for DOM snapshot and heat.
- * Heat points are document-normalized (0–1); canvas is full scaled page size.
- * The frame clips both layers equally (top-left laptop fold).
+ * Full-bleed storefront preview. Snapshot + heat share origin/scale; the
+ * parent clips to the desktop viewport. Never remount on hover or mode change.
  */
-export function RouteCardPreview({
+export const RouteCardPreview = memo(function RouteCardPreview({
   heatmap,
   active,
 }: {
@@ -71,22 +70,20 @@ export function RouteCardPreview({
     setFailed(false);
   }, [heatmap?.route, heatmap?.snapshotEvents]);
 
+  const layoutRef = useRef({ width: 0, height: 0 });
+
   useEffect(() => {
     if (!active || !hasSnapshot || !heatmap?.snapshotEvents) return;
     const frame = frameRef.current;
     const host = hostRef.current;
-    const heat = heatRef.current;
     if (!frame || !host) return;
 
     while (host.firstChild) host.removeChild(host.firstChild);
     let replayer: Replayer | null = null;
 
     try {
-      const frameW = Math.max(1, frame.clientWidth || 360);
-      const frameH = Math.max(1, frame.clientHeight || 200);
-
+      const frameW = Math.max(1, frame.clientWidth || 960);
       const meta = metaViewport(heatmap.snapshotEvents);
-      // Document space is what click x/y are normalized against — never invent size.
       const documentSize =
         heatmap.document ??
         (meta
@@ -103,6 +100,10 @@ export function RouteCardPreview({
         heatmap.viewport ?? meta,
         frameW,
       );
+      layoutRef.current = {
+        width: layout.displayWidth,
+        height: layout.displayHeight,
+      };
 
       replayer = new Replayer(toRrwebEvents(heatmap.snapshotEvents), {
         root: host,
@@ -120,14 +121,9 @@ export function RouteCardPreview({
       });
       replayer.pause(0);
 
-      // Host is the full scaled page (may be taller than the frame).
-      // Frame overflow:hidden clips both DOM + heat identically at top-left.
       host.style.position = "absolute";
       host.style.left = "0";
       host.style.top = "0";
-      host.style.right = "auto";
-      host.style.bottom = "auto";
-      host.style.margin = "0";
       host.style.width = `${layout.displayWidth}px`;
       host.style.height = `${layout.displayHeight}px`;
       host.style.overflow = "hidden";
@@ -152,37 +148,12 @@ export function RouteCardPreview({
           margin: "0px",
           border: "0",
           display: "block",
+          pointerEvents: "none",
           width: `${layout.pageWidth}px`,
           height: `${layout.pageHeight}px`,
         });
       }
-
-      if (heat) {
-        // SAME pixel size as the scaled page — points use full document 0–1.
-        drawHeatForMode(
-          heat,
-          [...heatmap.points],
-          layout.displayWidth,
-          layout.displayHeight,
-          heatmap.mode,
-          { compact: true },
-        );
-        Object.assign(heat.style, {
-          position: "absolute",
-          left: "0px",
-          top: "0px",
-          width: `${layout.displayWidth}px`,
-          height: `${layout.displayHeight}px`,
-          margin: "0",
-          pointerEvents: "none",
-          zIndex: "2",
-          mixBlendMode: heatBlendMode(heatmap.mode),
-        });
-      }
-
-      // Keep frame clipping tight to the landscape window.
       frame.style.overflow = "hidden";
-      void frameH; // frame height clips vertically via CSS
     } catch {
       setFailed(true);
     }
@@ -195,16 +166,40 @@ export function RouteCardPreview({
       }
       while (host.firstChild) host.removeChild(host.firstChild);
     };
-  }, [active, hasSnapshot, heatmap]);
+  }, [active, hasSnapshot, heatmap?.route, heatmap?.snapshotEvents]);
+
+  useEffect(() => {
+    const heat = heatRef.current;
+    if (!heat || !heatmap || layoutRef.current.width <= 0) return;
+    drawHeatForMode(
+      heat,
+      [...heatmap.points],
+      layoutRef.current.width,
+      layoutRef.current.height,
+      heatmap.mode,
+      { compact: true },
+    );
+    Object.assign(heat.style, {
+      position: "absolute",
+      left: "0px",
+      top: "0px",
+      width: `${layoutRef.current.width}px`,
+      height: `${layoutRef.current.height}px`,
+      margin: "0",
+      pointerEvents: "none",
+      zIndex: "2",
+      mixBlendMode: heatBlendMode(heatmap.mode),
+    });
+  }, [heatmap?.mode, heatmap?.points, heatmap]);
 
   if (!heatmap) {
-    return <div className="route-card-skeleton" aria-hidden />;
+    return <div className="site-page-skeleton" aria-hidden />;
   }
 
   if (!hasSnapshot) {
     return (
       <MiniHeatmap
-        className="route-card-mini"
+        className="site-page-mini"
         mode={heatmap.mode}
         points={heatmap.points}
       />
@@ -212,12 +207,11 @@ export function RouteCardPreview({
   }
 
   return (
-    <div className="route-card-live-preview" ref={frameRef}>
-      {/* Shared layer: DOM + heat share origin and scale; frame crops the fold. */}
-      <div className="route-card-stack">
-        <div className="route-card-rrweb" ref={hostRef} />
-        <canvas className="route-card-heat" ref={heatRef} aria-hidden />
+    <div className="site-page-preview" ref={frameRef}>
+      <div className="site-page-stack">
+        <div className="site-page-rrweb" ref={hostRef} />
+        <canvas className="site-page-heat" ref={heatRef} aria-hidden />
       </div>
     </div>
   );
-}
+});

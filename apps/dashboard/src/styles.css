@@ -749,7 +749,6 @@ body {
   top: 0;
   left: 0;
   transform-origin: 0 0;
-  will-change: transform;
 }
 .site-canvas-edges {
   position: absolute;
@@ -775,13 +774,16 @@ body {
   pointer-events: stroke;
   cursor: default;
 }
+.figma-edge:hover path:nth-of-type(2) {
+  stroke-width: 3.2;
+}
 .figma-edge-count {
   fill: #e7e9ea;
   font-size: 11px;
   font-weight: 700;
 }
 .figma-source,
-.figma-artboard {
+.site-page {
   position: absolute;
 }
 .figma-source {
@@ -792,7 +794,6 @@ body {
   border: 1px solid #3d3d3d;
   border-radius: 10px;
   background: #2a2a2a;
-  box-shadow: 0 10px 28px rgb(0 0 0 / 22%);
 }
 .figma-source em {
   color: #8a8a8a;
@@ -801,8 +802,7 @@ body {
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.figma-source strong,
-.figma-artboard-label strong {
+.figma-source strong {
   overflow: hidden;
   color: #f3f3f3;
   font-size: 13px;
@@ -810,55 +810,70 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.figma-source small,
-.figma-artboard-label small {
+.figma-source small {
   overflow: hidden;
   color: #9a9a9a;
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.figma-artboard {
+.site-page {
   display: grid;
-  grid-template-rows: 28px 1fr;
-  gap: 6px;
-}
-.figma-artboard-label {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: baseline;
-  gap: 2px 8px;
-}
-.figma-artboard-label small {
-  grid-column: 1;
-}
-.figma-artboard-label button {
-  grid-row: 1 / span 2;
-  grid-column: 2;
-  align-self: center;
-  height: 22px;
-  padding: 0 8px;
+  grid-template-rows: 18px 1fr;
+  gap: 4px;
+  background: none;
   border: 0;
-  border-radius: 6px;
-  color: #fff;
-  background: #0d99ff;
-  font-size: 11px;
-  font-weight: 700;
+  box-shadow: none;
   cursor: pointer;
 }
-.figma-frame {
-  overflow: hidden;
-  border: 1px solid #111;
-  border-radius: 2px;
-  background: #fff;
-  box-shadow:
-    0 0 0 1px rgb(255 255 255 / 4%),
-    0 18px 40px rgb(0 0 0 / 35%);
+.site-page-stage {
+  position: relative;
+  min-height: 0;
 }
-.figma-artboard[data-on="true"] .figma-frame {
-  box-shadow:
-    0 0 0 1.5px #0d99ff,
-    0 18px 40px rgb(0 0 0 / 35%);
+.site-page-view {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+  background: #fff;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  contain: strict;
+  content-visibility: auto;
+  contain-intrinsic-size: 960px 700px;
+  isolation: isolate;
+  pointer-events: none;
+  transform: translateZ(0);
+}
+.site-page-ring {
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  pointer-events: none;
+  outline: 2px solid transparent;
+  outline-offset: -2px;
+}
+.site-page:hover .site-page-ring,
+.site-page:focus-visible .site-page-ring {
+  outline-color: #0d99ff;
+}
+.site-page-caption {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+  overflow: hidden;
+  color: #d0d0d0;
+  font-size: 12px;
+  font-weight: 650;
+  pointer-events: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.site-page-caption span {
+  color: #8a8a8a;
+  font-size: 11px;
+  font-weight: 500;
 }
 .heatmap-legend[data-mode="hover"] i {
   background: linear-gradient(90deg, #38bdf8, #a855f7, #fb923c);
@@ -867,63 +882,6 @@ body {
   background: linear-gradient(90deg, #b91c1c, #facc15, #22c55e);
 }
 
-.site-canvas-edge-tip {
-  position: absolute;
-  right: 12px;
-  bottom: 12px;
-  z-index: 5;
-  width: min(320px, calc(100% - 24px));
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  background: rgb(15 18 22 / 96%);
-  backdrop-filter: blur(8px);
-  pointer-events: none;
-}
-.site-canvas-edge-tip-path {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 8px;
-  color: var(--text);
-  font-size: 12px;
-  font-weight: 600;
-}
-.site-canvas-edge-tip-path code,
-.site-canvas-edge-tip code {
-  overflow: hidden;
-  max-width: 120px;
-  padding: 2px 5px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  color: var(--text);
-  background: #000;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.site-canvas-edge-tip-primary {
-  margin: 0 0 6px !important;
-  color: #1d9bf0 !important;
-  font-weight: 700;
-}
-.site-canvas-edge-tip p {
-  margin: 0 0 5px;
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.35;
-}
-.site-canvas-edge-tip p:last-child {
-  margin-bottom: 0;
-}
-.site-canvas-edge-tip strong {
-  color: var(--text);
-  font-weight: 700;
-}
-.site-canvas-edge-tip-share {
-  color: var(--text-muted);
-}
 .site-canvas-empty {
   display: grid;
   gap: 6px;
@@ -944,56 +902,51 @@ body {
   font-size: 13px;
 }
 
-.route-card-skeleton {
+.site-page-skeleton {
   width: 100%;
   height: 100%;
-  min-height: 140px;
-  background: var(--bg-elevated);
+  min-height: 100%;
+  background: #fff;
 }
-.route-card-mini {
+.site-page-mini {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: top left;
+  pointer-events: none;
 }
-.route-card-live-preview {
+.site-page-preview {
   position: relative;
   width: 100%;
   height: 100%;
   min-height: 100%;
   overflow: hidden;
-  background: #111;
+  background: #fff;
+  pointer-events: none;
 }
-/* Stack keeps DOM + heat on the same origin; parent clips to landscape fold. */
-.route-card-stack {
+.site-page-stack {
   position: absolute;
   left: 0;
   top: 0;
   overflow: visible;
+  pointer-events: none;
 }
-.route-card-rrweb {
+.site-page-rrweb {
   position: relative;
   overflow: hidden;
   pointer-events: none;
 }
-.route-card-rrweb .replayer-wrapper {
+.site-page-rrweb .replayer-wrapper,
+.site-page-rrweb iframe {
   pointer-events: none;
 }
-.route-card-heat {
+.site-page-heat {
   position: absolute;
   left: 0;
   top: 0;
   pointer-events: none;
   z-index: 2;
-}
-.figma-frame {
-  height: 100%;
-  min-height: 0;
-}
-.figma-frame .route-card-live-preview,
-.figma-frame .route-card-mini,
-.figma-frame .route-card-skeleton {
-  min-height: 100%;
 }
 
 /* —— Heatmap drill-in —— */

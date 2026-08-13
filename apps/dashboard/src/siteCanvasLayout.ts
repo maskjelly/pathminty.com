@@ -38,15 +38,15 @@ export type FlowEdge = {
   kind: "page" | "source";
 };
 
-export const FRAME_W = 360;
-export const FRAME_H = 480;
+export const FRAME_W = 960;
+export const FRAME_H = 700;
 export const FRAME_GAP_X = 160;
 export const FRAME_GAP_Y = 72;
-export const FRAME_PAD = 80;
+export const FRAME_PAD = 72;
 export const SOURCE_W = 176;
 export const SOURCE_H = 64;
 export const SOURCE_X = 40;
-export const PAGE_COL_X = [280, 800, 1320, 1840] as const;
+export const PAGE_COL_X = [280, 1400, 2520, 3640] as const;
 export const MAX_FRAMES = 16;
 export const MAX_EDGES = 24;
 export const COLUMN_TITLES = ["Home", "Browse", "Product", "Checkout"] as const;

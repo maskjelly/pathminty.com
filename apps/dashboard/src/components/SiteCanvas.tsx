@@ -28,7 +28,6 @@ import {
   placeSources,
   shortPath,
   worldSize,
-  type FlowEdge,
   type PageFrame,
 } from "../siteCanvasLayout";
 import { RouteCardPreview } from "./RouteCardPreview";
@@ -61,9 +60,6 @@ export const SiteCanvas = forwardRef<
     originTx: 0,
     originTy: 0,
   });
-  const [hoverEdge, setHoverEdge] = useState<FlowEdge | null>(null);
-  const [hoverRoute, setHoverRoute] = useState<string | null>(null);
-  const [selectedRoute, setSelectedRoute] = useState<string | null>(null);
   const fittedFor = useRef("");
 
   const frames = useMemo(() => placeFrames(routes, journey), [routes, journey]);
@@ -160,8 +156,7 @@ export const SiteCanvas = forwardRef<
 
   const zoomToFrame = useCallback(
     (frame: PageFrame) => {
-      fitRect(frame.x - 24, frame.y - 48, FRAME_W + 48, FRAME_H + 72);
-      setSelectedRoute(frame.route);
+      fitRect(frame.x - 24, frame.y - 28, FRAME_W + 48, FRAME_H + 56);
     },
     [fitRect],
   );
@@ -196,7 +191,7 @@ export const SiteCanvas = forwardRef<
   const onPointerDown = (event: React.PointerEvent) => {
     if (event.button !== 0) return;
     const target = event.target as HTMLElement;
-    if (target.closest(".figma-artboard") || target.closest(".figma-source")) return;
+    if (target.closest(".site-page") || target.closest(".figma-source")) return;
     drag.current = {
       active: true,
       startX: event.clientX,
@@ -221,7 +216,7 @@ export const SiteCanvas = forwardRef<
     return (
       <div className="site-canvas-empty">
         <p>No pages in this range</p>
-        <span>Store pages will land here as frames you can zoom like Figma.</span>
+        <span>Store pages will show here as live website views.</span>
       </div>
     );
   }
@@ -285,39 +280,28 @@ export const SiteCanvas = forwardRef<
               const x2 = to.x;
               const y2 = to.y + to.h / 2;
               const d = connectorPath(x1, y1, x2, y2);
-              const active = hoverEdge?.from === edge.from && hoverEdge?.to === edge.to;
-              const related =
-                hoverRoute === edge.from ||
-                hoverRoute === edge.to ||
-                selectedRoute === edge.from ||
-                selectedRoute === edge.to;
-              const dimmed =
-                (hoverEdge && !active) ||
-                ((hoverRoute || selectedRoute) && !related && !active);
               const midX = (x1 + x2) / 2;
               const midY = (y1 + y2) / 2;
               return (
-                <g
-                  className="figma-edge"
-                  key={`${edge.from}->${edge.to}`}
-                  onMouseEnter={() => setHoverEdge(edge)}
-                  onMouseLeave={() => setHoverEdge(null)}
-                  opacity={dimmed ? 0.16 : 1}
-                >
-                  <path d={d} fill="none" stroke="transparent" strokeWidth={28} />
+                <g className="figma-edge" key={`${edge.from}->${edge.to}`}>
+                  <title>
+                    {edge.sessionCount} shoppers · {edge.from.replace(/^src:/u, "")} →{" "}
+                    {edge.to}
+                  </title>
+                  <path d={d} fill="none" stroke="transparent" strokeWidth={22} />
                   <path
                     d={d}
                     fill="none"
                     stroke={edge.kind === "source" ? "#8b98a5" : "#1d9bf0"}
-                    strokeWidth={active || edge.isPrimary ? 3.2 : 1.8}
+                    strokeWidth={edge.isPrimary ? 2.6 : 1.6}
                   />
                   <rect
-                    fill="#0b0d10"
-                    height="22"
-                    rx="11"
-                    width={Math.max(72, 36 + String(edge.sessionCount).length * 8)}
-                    x={midX - 36}
-                    y={midY - 11}
+                    fill="#111"
+                    height="20"
+                    rx="10"
+                    width={Math.max(64, 32 + String(edge.sessionCount).length * 8)}
+                    x={midX - 32}
+                    y={midY - 10}
                   />
                   <text
                     className="figma-edge-count"
@@ -325,7 +309,7 @@ export const SiteCanvas = forwardRef<
                     x={midX}
                     y={midY + 4}
                   >
-                    {edge.sessionCount} people
+                    {edge.sessionCount}
                   </text>
                 </g>
               );
@@ -353,73 +337,39 @@ export const SiteCanvas = forwardRef<
 
           {frames.map((frame) => {
             const heat = heatmaps[frame.route];
-            const selected = selectedRoute === frame.route;
-            const highlighted =
-              selected ||
-              hoverRoute === frame.route ||
-              hoverEdge?.from === frame.route ||
-              hoverEdge?.to === frame.route;
             return (
               <article
-                className="figma-artboard"
-                data-on={highlighted ? "true" : "false"}
+                className="site-page"
                 key={frame.route}
-                onClick={() => setSelectedRoute(frame.route)}
-                onDoubleClick={() => zoomToFrame(frame)}
-                onMouseEnter={() => setHoverRoute(frame.route)}
-                onMouseLeave={() => setHoverRoute(null)}
+                onClick={() => zoomToFrame(frame)}
+                onDoubleClick={(event) => {
+                  event.stopPropagation();
+                  onOpenRoute(frame.route);
+                }}
                 style={{
                   left: frame.x,
-                  top: frame.y - 28,
+                  top: frame.y - 22,
                   width: FRAME_W,
-                  height: FRAME_H + 28,
+                  height: FRAME_H + 22,
                 }}
               >
-                <header className="figma-artboard-label" title={frame.route}>
-                  <strong>{frame.label}</strong>
-                  <small>
-                    {shortPath(frame.route)} · {frame.sessionCount}{" "}
-                    {frame.sessionCount === 1 ? "session" : "sessions"}
-                  </small>
-                  <button
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      onOpenRoute(frame.route);
-                    }}
-                    type="button"
-                  >
-                    Open
-                  </button>
-                </header>
-                <div className="figma-frame">
-                  <RouteCardPreview active={Boolean(heat)} heatmap={heat} />
+                <p className="site-page-caption">
+                  {frame.label}
+                  <span>
+                    {shortPath(frame.route)} · {frame.sessionCount}
+                  </span>
+                </p>
+                <div className="site-page-stage">
+                  <div className="site-page-view">
+                    <RouteCardPreview active={Boolean(heat)} heatmap={heat} />
+                  </div>
+                  <span className="site-page-ring" aria-hidden />
                 </div>
               </article>
             );
           })}
         </div>
       </div>
-
-      {hoverEdge ? (
-        <div className="site-canvas-edge-tip" role="status">
-          <div className="site-canvas-edge-tip-path">
-            <code>{hoverEdge.from.replace(/^src:/u, "")}</code>
-            <span>→</span>
-            <code>{hoverEdge.to}</code>
-          </div>
-          <p>
-            <strong>{hoverEdge.sessionCount}</strong> shoppers took this path
-          </p>
-          {hoverEdge.kind === "page" ? (
-            <p>
-              <strong>{Math.round(hoverEdge.shareOfFrom * 100)}%</strong> of people on
-              the first page continued here
-            </p>
-          ) : (
-            <p>This is a traffic source into the store.</p>
-          )}
-        </div>
-      ) : null}
     </div>
   );
 });
