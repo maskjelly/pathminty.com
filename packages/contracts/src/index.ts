@@ -127,6 +127,19 @@ const DocumentSizeSchema = z
 
 export type DocumentSize = z.infer<typeof DocumentSizeSchema>;
 
+export const AcquisitionSchema = z
+  .object({
+    source: z.string().min(1).max(80),
+    medium: z.string().min(1).max(80).nullable(),
+    campaign: z.string().min(1).max(80).nullable(),
+    content: z.string().min(1).max(80).nullable(),
+    term: z.string().min(1).max(80).nullable(),
+    referrerHost: z.string().min(1).max(255).nullable(),
+  })
+  .strict();
+
+export type Acquisition = z.infer<typeof AcquisitionSchema>;
+
 const ReplayBatchBaseSchema = z.object({
   schemaVersion: z.literal(REPLAY_CONTRACT_VERSION),
   batchId: UuidSchema,
@@ -140,6 +153,8 @@ const ReplayBatchBaseSchema = z.object({
   sequence: z.number().int().nonnegative().max(9_999_999),
   capturedAt: z.string().datetime({ offset: true }),
   route: z.string().min(1).max(2_048),
+  /** First-touch UTM / referrer host. Never includes the raw query string. */
+  acquisition: AcquisitionSchema.optional(),
   viewport: ViewportSchema,
   /** Scrollable document dimensions; required for storefront rrweb heatmaps. */
   document: DocumentSizeSchema.optional(),
@@ -229,6 +244,8 @@ export const SessionSummarySchema = z
     rageClickCount: z.number().int().nonnegative().max(10_000).optional(),
     /** Document-normalized scroll samples (y = depth). Used for scroll heatmaps. */
     scrolls: z.array(HeatmapHoverSchema).max(400).optional(),
+    /** First-touch acquisition for this session. */
+    acquisition: AcquisitionSchema.optional(),
   })
   .strict();
 
@@ -521,10 +538,25 @@ export const JourneyEdgeSchema = z
 
 export type JourneyEdge = z.infer<typeof JourneyEdgeSchema>;
 
+export const AcquisitionStatSchema = z
+  .object({
+    key: z.string().min(1).max(200),
+    source: z.string().min(1).max(80),
+    medium: z.string().min(1).max(80).nullable(),
+    campaign: z.string().min(1).max(80).nullable(),
+    referrerHost: z.string().min(1).max(255).nullable(),
+    landingRoute: z.string().min(1).max(2_048),
+    sessionCount: numberAsNonNegInt(),
+  })
+  .strict();
+
+export type AcquisitionStat = z.infer<typeof AcquisitionStatSchema>;
+
 export const JourneyGraphResponseSchema = z
   .object({
     nodes: z.array(JourneyNodeSchema).max(80),
     edges: z.array(JourneyEdgeSchema).max(200),
+    acquisitions: z.array(AcquisitionStatSchema).max(40).default([]),
     totalSessions: numberAsNonNegInt(),
     checkoutSessions: numberAsNonNegInt(),
     orderCount: numberAsNonNegInt(),

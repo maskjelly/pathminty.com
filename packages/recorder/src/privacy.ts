@@ -92,3 +92,77 @@ export function sanitizeRecordedRoute(
   const path = pathname.split(/[?#]/u, 1)[0] || "/";
   return path.startsWith("/") ? path : `/${path}`;
 }
+
+export type StorefrontAcquisition = {
+  source: string;
+  medium: string | null;
+  campaign: string | null;
+  content: string | null;
+  term: string | null;
+  referrerHost: string | null;
+};
+
+function sanitizeUtmToken(value: string | null): string | null {
+  if (!value) return null;
+  const token = value.trim().slice(0, 80);
+  if (!token || token.includes("@") || token.includes("/") || token.includes(":")) {
+    return null;
+  }
+  if (!/^[a-zA-Z0-9._-]+$/u.test(token)) return null;
+  return token.toLowerCase();
+}
+
+function sanitizeReferrerHost(referrer: string, pageHost: string): string | null {
+  try {
+    const url = new URL(referrer);
+    const host = url.hostname.toLowerCase().replace(/\.$/u, "");
+    if (!host || host === pageHost.toLowerCase()) return null;
+    if (!/^[a-z0-9.-]+$/u.test(host) || host.length > 255) return null;
+    return host;
+  } catch {
+    return null;
+  }
+}
+
+/** Keep UTM + referrer host only. Never persist the raw query string. */
+export function extractAcquisition(
+  search: string,
+  referrer: string,
+  pageHost: string,
+): StorefrontAcquisition {
+  const params = new URLSearchParams(search.startsWith("?") ? search.slice(1) : search);
+  const source = sanitizeUtmToken(params.get("utm_source"));
+  const medium = sanitizeUtmToken(params.get("utm_medium"));
+  const campaign = sanitizeUtmToken(params.get("utm_campaign"));
+  const content = sanitizeUtmToken(params.get("utm_content"));
+  const term = sanitizeUtmToken(params.get("utm_term"));
+  const referrerHost = sanitizeReferrerHost(referrer, pageHost);
+  if (source) {
+    return {
+      source,
+      medium,
+      campaign,
+      content,
+      term,
+      referrerHost,
+    };
+  }
+  if (referrerHost) {
+    return {
+      source: "referral",
+      medium: "referral",
+      campaign: null,
+      content: null,
+      term: null,
+      referrerHost,
+    };
+  }
+  return {
+    source: "direct",
+    medium: "none",
+    campaign: null,
+    content: null,
+    term: null,
+    referrerHost: null,
+  };
+}

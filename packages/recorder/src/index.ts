@@ -27,7 +27,9 @@ export {
   createRrwebPrivacyOptions,
   isSensitiveStorefrontRoute,
   sanitizeRecordedRoute,
+  extractAcquisition,
   type RrwebRecordPrivacyOptions,
+  type StorefrontAcquisition,
 } from "./privacy";
 export {
   STORAGE_KEYS,

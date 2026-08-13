@@ -3,12 +3,10 @@ import { describe, expect, it } from "vitest";
 import type { JourneyGraphResponse, RouteStat } from "@pathminty/contracts";
 
 import {
-  buildMetroEdges,
+  buildFlowEdges,
   classifyRoute,
-  isOctilinear,
-  metroPath,
-  pickStationRoutes,
-  placeStations,
+  placeFrames,
+  pickFrameRoutes,
 } from "./siteCanvasLayout";
 
 function stat(route: string, sessionCount: number): RouteStat {
@@ -102,6 +100,7 @@ const journey: JourneyGraphResponse = {
       netRevenueMinor: 0,
     },
   ],
+  acquisitions: [],
   totalSessions: 10,
   checkoutSessions: 3,
   orderCount: 0,
@@ -131,7 +130,7 @@ describe("classifyRoute", () => {
   });
 });
 
-describe("metro layout", () => {
+describe("figma frame layout", () => {
   it("keeps hubs and drops low-traffic extras", () => {
     const routes = [
       stat("/", 20),
@@ -140,14 +139,14 @@ describe("metro layout", () => {
         stat(`/products/item-${index}`, 20 - index),
       ),
     ];
-    const picked = pickStationRoutes(routes, null);
+    const picked = pickFrameRoutes(routes, null);
     expect(picked).toContain("/");
     expect(picked).toContain("/cart");
     expect(picked.length).toBeLessThanOrEqual(16);
   });
 
-  it("lays stations left to right like a tube map", () => {
-    const stations = placeStations(
+  it("lays page frames left to right through the store", () => {
+    const frames = placeFrames(
       [
         stat("/", 10),
         stat("/collections/shirts", 6),
@@ -156,20 +155,14 @@ describe("metro layout", () => {
       ],
       journey,
     );
-    const x = Object.fromEntries(stations.map((station) => [station.route, station.x]));
+    const x = Object.fromEntries(frames.map((frame) => [frame.route, frame.x]));
     expect(x["/"] ?? 0).toBeLessThan(x["/collections/shirts"] ?? 0);
     expect(x["/collections/shirts"] ?? 0).toBeLessThan(x["/products/tee"] ?? 0);
     expect(x["/products/tee"] ?? 0).toBeLessThan(x["/cart"] ?? 0);
   });
 
-  it("draws octilinear traffic lines", () => {
-    expect(isOctilinear(metroPath(0, 0, 200, 0, 0))).toBe(true);
-    expect(isOctilinear(metroPath(0, 40, 240, 120, 0))).toBe(true);
-    expect(isOctilinear(metroPath(0, 0, 80, 200, 1))).toBe(true);
-  });
-
-  it("builds a primary trunk from the heaviest forward step", () => {
-    const stations = placeStations(
+  it("builds a primary path from the heaviest page-to-page step", () => {
+    const frames = placeFrames(
       [
         stat("/", 10),
         stat("/collections/shirts", 6),
@@ -178,9 +171,9 @@ describe("metro layout", () => {
       ],
       journey,
     );
-    const edges = buildMetroEdges(journey, stations);
-    expect(edges[0]?.isPrimary).toBe(true);
-    expect(edges[0]?.from).toBe("/");
-    expect(edges[0]?.to).toBe("/collections/shirts");
+    const edges = buildFlowEdges(journey, frames, []);
+    const primary = edges.find((edge) => edge.isPrimary);
+    expect(primary?.from).toBe("/");
+    expect(primary?.to).toBe("/collections/shirts");
   });
 });

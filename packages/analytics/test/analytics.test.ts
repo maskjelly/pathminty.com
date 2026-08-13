@@ -52,6 +52,7 @@ type RrwebBatchOverrides = {
   source?: RrwebReplayBatch["source"];
   document?: RrwebReplayBatch["document"];
   viewport?: RrwebReplayBatch["viewport"];
+  acquisition?: RrwebReplayBatch["acquisition"];
 };
 
 function jsonBatch(overrides: JsonBatchOverrides): JsonReplayBatch {
@@ -143,6 +144,7 @@ function rrwebBatch(overrides: RrwebBatchOverrides): RrwebReplayBatch {
           },
         ],
     isFinal: overrides.isFinal ?? false,
+    ...(overrides.acquisition ? { acquisition: overrides.acquisition } : {}),
   };
   return batch;
 }
@@ -832,6 +834,34 @@ describe("journey graph", () => {
     expect(landing?.checkoutRate).toBe(0.5);
     const edge = graph.edges.find((e) => e.from === "/" && e.to === "/collections/x");
     expect(edge?.sessionCount).toBe(2);
+    expect(graph.acquisitions.some((row) => row.source === "direct")).toBe(true);
+  });
+
+  it("copies first-touch UTM onto the session summary", () => {
+    const summary = summarizeReplayBatches(
+      [
+        rrwebBatch({
+          sequence: 0,
+          acquisition: {
+            source: "google",
+            medium: "cpc",
+            campaign: "spring",
+            content: null,
+            term: null,
+            referrerHost: "www.google.com",
+          },
+        }),
+      ],
+      { isFinal: true },
+    );
+    expect(summary.acquisition).toEqual({
+      source: "google",
+      medium: "cpc",
+      campaign: "spring",
+      content: null,
+      term: null,
+      referrerHost: "www.google.com",
+    });
   });
 });
 

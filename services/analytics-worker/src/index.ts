@@ -103,6 +103,9 @@ async function processSessionJob(
         ...(existing.purchasedAt ? { purchasedAt: existing.purchasedAt } : {}),
       };
     }
+    if (!summary.acquisition && existing?.acquisition) {
+      summary = { ...summary, acquisition: existing.acquisition };
+    }
 
     await objectStore.putSessionSummary(summary);
 

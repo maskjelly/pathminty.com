@@ -9,6 +9,7 @@ import {
   isSensitiveStorefrontRoute,
   peekSequence,
   sanitizeRecordedRoute,
+  extractAcquisition,
   type PendingBatch,
 } from "../src/index";
 
@@ -156,5 +157,28 @@ describe("privacy configuration", () => {
     expect(sanitizeRecordedRoute("/products/shirt", "?variant=1", "#reviews")).toBe(
       "/products/shirt",
     );
+  });
+
+  it("extracts UTM and referrer host without the raw query string", () => {
+    const paid = extractAcquisition(
+      "?utm_source=google&utm_medium=cpc&utm_campaign=spring&email=a@b.com",
+      "https://www.google.com/search?q=shirt",
+      "store.example",
+    );
+    expect(paid).toEqual({
+      source: "google",
+      medium: "cpc",
+      campaign: "spring",
+      content: null,
+      term: null,
+      referrerHost: "www.google.com",
+    });
+    expect(extractAcquisition("", "", "store.example").source).toBe("direct");
+    expect(
+      extractAcquisition("", "https://instagram.com/p/abc", "store.example").source,
+    ).toBe("referral");
+    expect(
+      extractAcquisition("?utm_source=evil@mail.com", "", "store.example").source,
+    ).toBe("direct");
   });
 });

@@ -16,6 +16,7 @@ import {
 } from "./batching";
 import {
   createRrwebPrivacyOptions,
+  extractAcquisition,
   isSensitiveStorefrontRoute,
   sanitizeRecordedRoute,
 } from "./privacy";
@@ -46,6 +47,7 @@ type PendingUploadEnvelope = {
   source: "storefront";
   payload: unknown[];
   isFinal: boolean;
+  acquisition?: ReturnType<typeof extractAcquisition>;
 };
 
 type ShopifyPrivacy = {
@@ -248,6 +250,15 @@ function captureDocumentSize(): { width: number; height: number } {
             source: "storefront",
             payload: [...batch.events],
             isFinal: batch.final,
+            ...(batch.sequence === 0
+              ? {
+                  acquisition: extractAcquisition(
+                    location.search,
+                    document.referrer,
+                    location.hostname,
+                  ),
+                }
+              : {}),
           };
 
           try {

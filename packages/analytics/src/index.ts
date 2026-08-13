@@ -421,6 +421,47 @@ export function buildJourneyGraph(input: {
     }
   }
 
+  const acquisitionCounts = new Map<
+    string,
+    {
+      source: string;
+      medium: string | null;
+      campaign: string | null;
+      referrerHost: string | null;
+      landingRoute: string;
+      sessionCount: number;
+    }
+  >();
+  for (const session of sessions) {
+    const landing = uniquePath(session)[0] ?? session.entryRoute;
+    const raw = session.acquisition;
+    const source = raw?.source ?? "direct";
+    const medium = raw?.medium ?? (source === "direct" ? "none" : null);
+    const campaign = raw?.campaign ?? null;
+    const referrerHost = raw?.referrerHost ?? null;
+    const key = `${source}|${medium ?? ""}|${campaign ?? ""}|${landing}`;
+    const existing = acquisitionCounts.get(key);
+    if (existing) {
+      existing.sessionCount += 1;
+    } else {
+      acquisitionCounts.set(key, {
+        source,
+        medium,
+        campaign,
+        referrerHost,
+        landingRoute: landing,
+        sessionCount: 1,
+      });
+    }
+  }
+  const acquisitions = [...acquisitionCounts.entries()]
+    .map(([key, row]) => ({ key, ...row }))
+    .sort(
+      (left, right) =>
+        right.sessionCount - left.sessionCount || left.key.localeCompare(right.key),
+    )
+    .slice(0, 40);
+
   const edges: JourneyEdge[] = [];
   for (const [key, set] of edgeSessions) {
     const [from, to] = key.split("\0");
@@ -442,6 +483,7 @@ export function buildJourneyGraph(input: {
   return {
     nodes: nodes.sort((a, b) => a.layer - b.layer || b.sessionCount - a.sessionCount),
     edges: edges.slice(0, 200),
+    acquisitions,
     totalSessions: sessions.length,
     checkoutSessions,
     orderCount: orderIdsGlobal.size,
@@ -1214,6 +1256,7 @@ export function summarizeReplayBatches(
     sawFinal,
     options.nowMs ?? Date.now(),
   );
+  const acquisition = firstAcquisition(batches);
 
   return {
     schemaVersion: 1,
@@ -1255,7 +1298,15 @@ export function summarizeReplayBatches(
     }),
     rageClickCount: countRageClicks(state.clicks),
     ...(state.scrolls.length > 0 ? { scrolls: state.scrolls } : {}),
+    ...(acquisition ? { acquisition } : {}),
   };
+}
+
+function firstAcquisition(batches: readonly ReplayBatch[]) {
+  for (const batch of batches) {
+    if (batch.acquisition) return batch.acquisition;
+  }
+  return undefined;
 }
 
 export function orderReplayEvents(batches: readonly ReplayBatch[]): RrwebEvent[] {

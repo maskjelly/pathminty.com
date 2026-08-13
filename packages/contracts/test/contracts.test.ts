@@ -75,6 +75,22 @@ describe("ReplayBatchSchema", () => {
     expect(ReplayBatchSchema.safeParse(validRrwebBatch).success).toBe(true);
   });
 
+  it("accepts first-touch UTM on a replay batch", () => {
+    expect(
+      ReplayBatchSchema.safeParse({
+        ...validRrwebBatch,
+        acquisition: {
+          source: "google",
+          medium: "cpc",
+          campaign: "spring",
+          content: null,
+          term: null,
+          referrerHost: "www.google.com",
+        },
+      }).success,
+    ).toBe(true);
+  });
+
   it("rejects an invalid tenant identifier", () => {
     expect(
       ReplayBatchSchema.safeParse({ ...validJsonBatch, shopId: "../../other-shop" })
