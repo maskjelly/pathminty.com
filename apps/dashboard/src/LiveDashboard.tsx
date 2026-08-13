@@ -3,7 +3,6 @@ import {
   ArrowLeft,
   CursorClick,
   DeviceMobile,
-  DeviceTablet,
   GearSix,
   MapTrifold,
   Monitor,
@@ -24,7 +23,7 @@ import type {
   ShopWorkspace,
   TimeRangePreset,
 } from "@pathminty/contracts";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   exchangeDashboardTicket,
@@ -45,9 +44,10 @@ import { BrandMark } from "./BrandMark";
 import { Landing } from "./marketing/Landing";
 import { SettingsPage } from "./merchant/SettingsPage";
 import { ActivityTimeline } from "./components/ActivityTimeline";
+import { CanvasToolbar } from "./components/CanvasToolbar";
 import { HeatmapSurface } from "./components/HeatmapSurface";
 import { ReplayViewer } from "./components/ReplayViewer";
-import { SiteCanvas } from "./components/SiteCanvas";
+import { SiteCanvas, type SiteCanvasHandle } from "./components/SiteCanvas";
 
 type View = "Heatmaps" | "Recordings" | "Settings";
 type HeatmapPane = "map" | "route";
@@ -195,6 +195,8 @@ export function LiveDashboard() {
   const [hideBots, setHideBots] = useState(true);
   const [sessionQuery, setSessionQuery] = useState("");
   const [planBusy, setPlanBusy] = useState(false);
+  const [canvasScale, setCanvasScale] = useState(0.35);
+  const canvasRef = useRef<SiteCanvasHandle | null>(null);
   const [hasTicket] = useState(() => {
     const search = new URLSearchParams(window.location.search);
     const fragment = new URLSearchParams(window.location.hash.slice(1));
@@ -544,7 +546,10 @@ export function LiveDashboard() {
           ))}
         </nav>
       </aside>
-      <main className="workspace live-workspace">
+      <main
+        className="workspace live-workspace"
+        data-canvas={view === "Heatmaps" && !selectedRoute ? "true" : "false"}
+      >
         <header className="topbar">
           <div className="title-lockup">
             <p>PathMinty</p>
@@ -629,8 +634,8 @@ export function LiveDashboard() {
 
         {view === "Heatmaps" && (
           <>
-            <section className="live-toolbar site-toolbar">
-              {selectedRoute ? (
+            {selectedRoute ? (
+              <section className="live-toolbar site-toolbar">
                 <button
                   className="control back-control"
                   onClick={() => setSelectedRoute(null)}
@@ -638,173 +643,39 @@ export function LiveDashboard() {
                 >
                   <ArrowLeft size={14} /> Canvas
                 </button>
-              ) : null}
-              <div className="mode-switch" aria-label="Time range">
-                {TIME_PRESETS.map((preset) => (
+                <div className="mode-switch" aria-label="Time range">
+                  {TIME_PRESETS.map((preset) => (
+                    <button
+                      key={preset.id}
+                      data-active={timePreset === preset.id}
+                      onClick={() => setTimePreset(preset.id)}
+                      type="button"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="mode-switch" aria-label="Heatmap mode">
                   <button
-                    key={preset.id}
-                    data-active={timePreset === preset.id}
-                    onClick={() => setTimePreset(preset.id)}
+                    data-active={heatmapMode === "click"}
+                    onClick={() => setHeatmapMode("click")}
                     type="button"
                   >
-                    {preset.label}
+                    Click
                   </button>
-                ))}
-              </div>
-              <div className="mode-switch" aria-label="Heatmap mode">
-                <button
-                  data-active={heatmapMode === "click"}
-                  onClick={() => setHeatmapMode("click")}
-                  type="button"
-                >
-                  Click
-                </button>
-                <button
-                  data-active={heatmapMode === "hover"}
-                  onClick={() => setHeatmapMode("hover")}
-                  type="button"
-                >
-                  Hover
-                </button>
-              </div>
-              <div className="device-switch" aria-label="Device">
-                <button
-                  data-active={device === "all"}
-                  onClick={() => setDevice("all")}
-                  type="button"
-                >
-                  All
-                </button>
-                <button
-                  data-active={device === "desktop"}
-                  onClick={() => setDevice("desktop")}
-                  title="Desktop"
-                  type="button"
-                >
-                  <Monitor size={16} />
-                </button>
-                <button
-                  data-active={device === "tablet"}
-                  onClick={() => setDevice("tablet")}
-                  title="Tablet"
-                  type="button"
-                >
-                  <DeviceTablet size={16} />
-                </button>
-                <button
-                  data-active={device === "mobile"}
-                  onClick={() => setDevice("mobile")}
-                  title="Mobile"
-                  type="button"
-                >
-                  <DeviceMobile size={16} />
-                </button>
-              </div>
-              {!selectedRoute && (
-                <>
-                  <label className="route-search">
-                    Search routes
-                    <input
-                      value={routeQuery}
-                      onChange={(event) => {
-                        setRouteQuery(event.target.value);
-                        setRouteLimit(SITE_MAP_PAGE);
-                      }}
-                      placeholder="/products/…"
-                      type="search"
-                    />
-                  </label>
-                  <label className="route-sort">
-                    Sort
-                    <select
-                      value={routeSort}
-                      onChange={(event) =>
-                        setRouteSort(event.target.value as RouteSort)
-                      }
-                    >
-                      <option value="most_active">Most active</option>
-                      <option value="least_active">Least active</option>
-                      <option value="sessions">Most sessions</option>
-                      <option value="alpha">A–Z</option>
-                    </select>
-                  </label>
-                </>
-              )}
-              {selectedRoute && (
+                  <button
+                    data-active={heatmapMode === "hover"}
+                    onClick={() => setHeatmapMode("hover")}
+                    type="button"
+                  >
+                    Hover
+                  </button>
+                </div>
                 <span className="route-pill" title={selectedRoute}>
                   {selectedRoute}
                 </span>
-              )}
-            </section>
-
-            {routeIndex && (
-              <section className="insight-strip" aria-label="Route insights">
-                <article>
-                  <p>Most active</p>
-                  <strong title={routeIndex.mostActive?.route}>
-                    {routeIndex.mostActive?.route ?? "—"}
-                  </strong>
-                  <span>
-                    {routeIndex.mostActive
-                      ? `${routeIndex.mostActive.eventCount} ${heatmapMode === "hover" ? "dwell samples" : "clicks"} · ${routeIndex.mostActive.sessionCount} sessions`
-                      : "No traffic in this range"}
-                  </span>
-                </article>
-                <article>
-                  <p>Least active</p>
-                  <strong title={routeIndex.leastActive?.route}>
-                    {routeIndex.leastActive?.route ?? "—"}
-                  </strong>
-                  <span>
-                    {routeIndex.leastActive
-                      ? `${routeIndex.leastActive.eventCount} events · at least 3 sessions`
-                      : "Needs 3+ sessions on a quieter page"}
-                  </span>
-                </article>
-                <article>
-                  <p>Watch this first</p>
-                  <strong>
-                    {sessions.some((session) => (session.rageClickCount ?? 0) > 0)
-                      ? "Rage clicks"
-                      : journey && journey.checkoutSessions === 0
-                        ? "No checkout reach"
-                        : "Quiet leaks"}
-                  </strong>
-                  <span>
-                    {sessions.some((session) => (session.rageClickCount ?? 0) > 0)
-                      ? "Open recordings filtered to frustrated taps"
-                      : "Least-active pages with traffic still waste attention"}
-                  </span>
-                </article>
-                <article>
-                  <p>Reached checkout</p>
-                  <strong>
-                    {journey
-                      ? `${journey.checkoutSessions}/${journey.totalSessions}`
-                      : "—"}
-                  </strong>
-                  <span>
-                    {journey
-                      ? `${Math.round(
-                          (journey.checkoutSessions /
-                            Math.max(1, journey.totalSessions)) *
-                            100,
-                        )}% of sessions hit cart or checkout`
-                      : "Builds from multi-page journeys"}
-                  </span>
-                </article>
-                <article>
-                  <p>In range</p>
-                  <strong>
-                    {routeIndex.totalSessions} sessions · {routeIndex.totalRoutes} pages
-                  </strong>
-                  <span>
-                    {routeIndex.totalEvents}{" "}
-                    {heatmapMode === "hover" ? "dwell" : "click"} events · {timePreset}
-                  </span>
-                </article>
               </section>
-            )}
+            ) : null}
 
             {selectedRoute ? (
               <div className="heatmap-drill">
@@ -818,31 +689,57 @@ export function LiveDashboard() {
                 <HeatmapSurface heatmap={heatmap} loading={heatmapLoading} />
               </div>
             ) : (
-              <section className="site-canvas-section" aria-label="Site canvas">
-                {mapLoading && !routeIndex ? (
-                  <p className="site-map-status">Building canvas…</p>
-                ) : routeIndex && routeIndex.routes.length === 0 ? (
-                  <EmptySessions onRefresh={refresh} />
-                ) : (
-                  <>
-                    <SiteCanvas
-                      routes={routeIndex?.routes ?? []}
-                      heatmaps={miniHeatmaps}
-                      journey={journey}
-                      onOpenRoute={setSelectedRoute}
-                    />
-                    {routeIndex && routeIndex.totalRoutes > routeLimit && (
-                      <button
-                        className="control show-more"
-                        onClick={() => setRouteLimit((value) => value + SITE_MAP_PAGE)}
-                        type="button"
-                      >
-                        Load more pages ({routeIndex.totalRoutes - routeLimit} left)
-                      </button>
-                    )}
-                  </>
-                )}
-              </section>
+              <div className="canvas-stage">
+                <CanvasToolbar
+                  device={device}
+                  heatmapMode={heatmapMode}
+                  onDevice={setDevice}
+                  onFit={() => canvasRef.current?.fitAll()}
+                  onHeatmapMode={setHeatmapMode}
+                  onRefresh={refresh}
+                  onRouteQuery={(value) => {
+                    setRouteQuery(value);
+                    setRouteLimit(SITE_MAP_PAGE);
+                  }}
+                  onRouteSort={setRouteSort}
+                  onTimePreset={setTimePreset}
+                  onZoomIn={() => canvasRef.current?.zoomIn()}
+                  onZoomOut={() => canvasRef.current?.zoomOut()}
+                  routeQuery={routeQuery}
+                  routeSort={routeSort}
+                  scale={canvasScale}
+                  timePreset={timePreset}
+                />
+                <section className="site-canvas-section" aria-label="Site canvas">
+                  {mapLoading && !routeIndex ? (
+                    <p className="site-map-status">Building canvas…</p>
+                  ) : routeIndex && routeIndex.routes.length === 0 ? (
+                    <EmptySessions onRefresh={refresh} />
+                  ) : (
+                    <>
+                      <SiteCanvas
+                        heatmaps={miniHeatmaps}
+                        journey={journey}
+                        onOpenRoute={setSelectedRoute}
+                        onScaleChange={setCanvasScale}
+                        ref={canvasRef}
+                        routes={routeIndex?.routes ?? []}
+                      />
+                      {routeIndex && routeIndex.totalRoutes > routeLimit && (
+                        <button
+                          className="control show-more"
+                          onClick={() =>
+                            setRouteLimit((value) => value + SITE_MAP_PAGE)
+                          }
+                          type="button"
+                        >
+                          Load more pages ({routeIndex.totalRoutes - routeLimit} left)
+                        </button>
+                      )}
+                    </>
+                  )}
+                </section>
+              </div>
             )}
 
             {showTimeline && activity && heatmapPane === "route" && (

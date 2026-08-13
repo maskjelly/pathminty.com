@@ -3,8 +3,15 @@ import type {
   JourneyGraphResponse,
   RouteStat,
 } from "@pathminty/contracts";
-import { MagnifyingGlassMinus, MagnifyingGlassPlus } from "@phosphor-icons/react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import {
   COLUMN_TITLES,
@@ -26,17 +33,23 @@ import {
 } from "../siteCanvasLayout";
 import { RouteCardPreview } from "./RouteCardPreview";
 
-export function SiteCanvas({
-  routes,
-  heatmaps,
-  journey,
-  onOpenRoute,
-}: {
-  routes: readonly RouteStat[];
-  heatmaps: Record<string, HeatmapResponse>;
-  journey: JourneyGraphResponse | null;
-  onOpenRoute: (route: string) => void;
-}) {
+export type SiteCanvasHandle = {
+  zoomIn: () => void;
+  zoomOut: () => void;
+  fitAll: () => void;
+  scale: number;
+};
+
+export const SiteCanvas = forwardRef<
+  SiteCanvasHandle,
+  {
+    routes: readonly RouteStat[];
+    heatmaps: Record<string, HeatmapResponse>;
+    journey: JourneyGraphResponse | null;
+    onOpenRoute: (route: string) => void;
+    onScaleChange?: (scale: number) => void;
+  }
+>(function SiteCanvas({ routes, heatmaps, journey, onOpenRoute, onScaleChange }, ref) {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const [scale, setScale] = useState(0.35);
   const [tx, setTx] = useState(32);
@@ -113,9 +126,37 @@ export function SiteCanvas({
     setTy((viewport.clientHeight - h * next) / 2 - y * next);
   }, []);
 
+  const zoomFromCenter = useCallback(
+    (factor: number) => {
+      const viewport = viewportRef.current?.getBoundingClientRect();
+      if (!viewport) return;
+      zoomAt(
+        viewport.left + viewport.width / 2,
+        viewport.top + viewport.height / 2,
+        factor,
+      );
+    },
+    [zoomAt],
+  );
+
   const fitAll = useCallback(() => {
     fitRect(0, 0, worldW, worldH);
   }, [fitRect, worldH, worldW]);
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      zoomIn: () => zoomFromCenter(1.15),
+      zoomOut: () => zoomFromCenter(0.87),
+      fitAll,
+      scale,
+    }),
+    [fitAll, scale, zoomFromCenter],
+  );
+
+  useEffect(() => {
+    onScaleChange?.(scale);
+  }, [onScaleChange, scale]);
 
   const zoomToFrame = useCallback(
     (frame: PageFrame) => {
@@ -187,57 +228,6 @@ export function SiteCanvas({
 
   return (
     <div className="site-canvas-shell figma-shell">
-      <div className="site-canvas-chrome">
-        <div className="site-canvas-legend">
-          <span className="site-canvas-eyebrow">Store canvas</span>
-          <span className="site-canvas-hint">
-            Pan to move. Pinch or ⌘-scroll to zoom. Double-click a page to inspect it.
-            Numbers on lines are shoppers.
-            {journey
-              ? ` ${journey.checkoutSessions}/${journey.totalSessions} reached cart or checkout.`
-              : ""}
-          </span>
-        </div>
-        <div className="site-canvas-tools">
-          <button
-            className="icon-button"
-            onClick={() => {
-              const viewport = viewportRef.current?.getBoundingClientRect();
-              if (!viewport) return;
-              zoomAt(
-                viewport.left + viewport.width / 2,
-                viewport.top + viewport.height / 2,
-                1.15,
-              );
-            }}
-            title="Zoom in"
-            type="button"
-          >
-            <MagnifyingGlassPlus size={16} />
-          </button>
-          <button
-            className="icon-button"
-            onClick={() => {
-              const viewport = viewportRef.current?.getBoundingClientRect();
-              if (!viewport) return;
-              zoomAt(
-                viewport.left + viewport.width / 2,
-                viewport.top + viewport.height / 2,
-                0.87,
-              );
-            }}
-            title="Zoom out"
-            type="button"
-          >
-            <MagnifyingGlassMinus size={16} />
-          </button>
-          <button className="control" onClick={fitAll} type="button">
-            Fit all
-          </button>
-          <span className="site-canvas-zoom">{Math.round(scale * 100)}%</span>
-        </div>
-      </div>
-
       <div
         className="site-canvas-viewport figma-viewport"
         onPointerCancel={onPointerUp}
@@ -432,4 +422,4 @@ export function SiteCanvas({
       ) : null}
     </div>
   );
-}
+});

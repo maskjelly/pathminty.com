@@ -323,6 +323,113 @@ body {
   overflow-y: auto;
   background: var(--bg);
 }
+.live-workspace[data-canvas="true"] {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.live-workspace[data-canvas="true"] .topbar {
+  display: none;
+}
+.live-workspace[data-canvas="true"] .health-banner {
+  flex-shrink: 0;
+}
+.canvas-stage {
+  display: grid;
+  grid-template-columns: 72px minmax(0, 1fr);
+  flex: 1;
+  min-height: 0;
+}
+.canvas-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  height: 100%;
+  padding: 10px 6px 12px;
+  overflow: auto;
+  border-right: 1px solid var(--border);
+  background: #161616;
+}
+.canvas-tool-group {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #2f2f2f;
+  border-radius: 8px;
+  background: #1c1c1c;
+}
+.canvas-tool-group button {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid #2f2f2f;
+  color: #cfcfcf;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.canvas-tool-group button:last-child {
+  border-bottom: 0;
+}
+.canvas-tool-group button:hover {
+  background: #262626;
+  color: #fff;
+}
+.canvas-tool-group button[data-active="true"] {
+  color: #fff;
+  background: #2a2a2a;
+  box-shadow: inset 2px 0 0 #0d99ff;
+}
+.canvas-tool-search {
+  display: grid;
+  gap: 4px;
+  color: #8a8a8a;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.canvas-tool-search input,
+.canvas-tool-search select {
+  width: 100%;
+  height: 28px;
+  padding: 0 6px;
+  border: 1px solid #2f2f2f;
+  border-radius: 6px;
+  color: #eee;
+  background: #1c1c1c;
+  font: 400 11px var(--font);
+}
+.canvas-tool-zoom span {
+  display: grid;
+  place-items: center;
+  height: 24px;
+  color: #8a8a8a;
+  font-size: 10px;
+}
+.canvas-tool-refresh {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-top: auto;
+  height: 30px;
+  border: 1px solid #2f2f2f;
+  border-radius: 8px;
+  color: #cfcfcf;
+  background: #1c1c1c;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+.canvas-tool-refresh:hover {
+  color: #fff;
+  background: #262626;
+}
 .live-shell .brand-mark {
   padding: 0;
   cursor: pointer;
@@ -575,7 +682,8 @@ body {
 .site-canvas-section {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 140px);
+  min-height: 0;
+  height: 100%;
   padding: 0;
 }
 .site-canvas-shell {
@@ -583,10 +691,11 @@ body {
   display: flex;
   flex: 1;
   flex-direction: column;
-  min-height: calc(100vh - 160px);
+  min-height: 0;
+  height: 100%;
   margin: 0;
   overflow: hidden;
-  background: #000;
+  background: #1e1e1e;
 }
 .site-canvas-chrome {
   display: flex;
