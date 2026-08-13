@@ -5,6 +5,7 @@ import { hashPassword, verifyPassword } from "./passwords";
 type Store = {
   get(key: string, type: "json"): Promise<unknown>;
   put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+  delete(key: string): Promise<void>;
   list(options: { prefix: string }): Promise<{ keys: Array<{ name: string }> }>;
 };
 
@@ -105,6 +106,11 @@ export async function createStaffSession(
     { expirationTtl: 12 * 60 * 60 },
   );
   return id;
+}
+
+export async function deleteStaffSession(store: Store, id: string): Promise<void> {
+  if (!/^[a-f0-9]{64}$/u.test(id)) return;
+  await store.delete(sessionKey(id));
 }
 
 export async function readStaffSession(

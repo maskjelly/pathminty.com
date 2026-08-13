@@ -2,7 +2,12 @@ import { env } from "cloudflare:workers";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { useFetcher, useLoaderData } from "react-router";
 import { PLAN_CATALOG, type PlanId } from "@pathminty/contracts";
-import { readUsage, writeSubscription, writeUsage } from "@pathminty/db/worker";
+import {
+  readSubscription,
+  readUsage,
+  writeSubscription,
+  writeUsage,
+} from "@pathminty/db/worker";
 
 import { authenticate } from "../shopify.server";
 
@@ -16,9 +21,15 @@ type SubscriptionMutation = {
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
+  const [subscription, usage] = await Promise.all([
+    readSubscription(env.SHOPIFY_INSTALLATIONS, session.shop),
+    readUsage(env.SHOPIFY_INSTALLATIONS, session.shop),
+  ]);
   return {
     plans: Object.values(PLAN_CATALOG),
+    currentPlanId: subscription.planId,
+    usage,
   };
 };
 
@@ -108,7 +119,7 @@ async function persistPlan(shopId: string, planId: PlanId) {
 }
 
 export default function Billing() {
-  const { plans } = useLoaderData<typeof loader>();
+  const { plans, currentPlanId, usage } = useLoaderData<typeof loader>();
   const fetcher = useFetcher<typeof action>();
   const confirmationUrl =
     fetcher.data && "confirmationUrl" in fetcher.data
@@ -123,13 +134,20 @@ export default function Billing() {
           pogo-stabs are filtered. When you hit the cap, recording pauses — we do not
           silently sample, and we do not surprise-upgrade you.
         </s-paragraph>
+        <s-paragraph>
+          This UTC month:{" "}
+          <strong>
+            {usage.billableSessions.toLocaleString()} / {usage.limit.toLocaleString()}
+          </strong>{" "}
+          on <strong>{PLAN_CATALOG[currentPlanId].name}</strong>.
+        </s-paragraph>
       </s-section>
       <s-section heading="Plans">
         <s-stack direction="block" gap="base">
           {plans.map((plan) => (
             <s-section
               key={plan.id}
-              heading={`${plan.name} · ${plan.priceUsd === 0 ? "Free" : `$${plan.priceUsd}/mo`}`}
+              heading={`${plan.name} · ${plan.priceUsd === 0 ? "Free" : `$${plan.priceUsd}/mo`}${plan.id === currentPlanId ? " · current" : ""}`}
             >
               <s-stack direction="block" gap="base">
                 <s-paragraph>
@@ -142,13 +160,18 @@ export default function Billing() {
                   ))}
                 </s-unordered-list>
                 <s-button
-                  variant={plan.id === "launch" ? "primary" : "secondary"}
+                  variant={plan.id === currentPlanId ? "primary" : "secondary"}
+                  disabled={plan.id === currentPlanId}
                   onClick={() => {
                     void fetcher.submit({ planId: plan.id }, { method: "POST" });
                   }}
                   {...(fetcher.state !== "idle" ? { loading: true } : {})}
                 >
-                  {plan.priceUsd === 0 ? "Stay on Free" : `Choose ${plan.name}`}
+                  {plan.id === currentPlanId
+                    ? "Current plan"
+                    : plan.priceUsd === 0
+                      ? "Switch to Free"
+                      : `Choose ${plan.name}`}
                 </s-button>
               </s-stack>
             </s-section>

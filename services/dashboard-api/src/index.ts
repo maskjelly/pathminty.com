@@ -29,6 +29,7 @@ import {
   bootstrapOps,
   buildFleet,
   createStaff,
+  clearStaffCookie,
   issueStaffCookie,
   listStaff,
   loginStaff,
@@ -716,6 +717,19 @@ app.post("/v1/ops/login", async (context) => {
     secure: new URL(context.req.url).protocol === "https:",
   });
   return context.json({ staff });
+});
+
+app.post("/v1/ops/logout", async (context) => {
+  const sessionId = readCookie(context.req.header("cookie"), "pathminty_ops");
+  await clearStaffCookie(context.env.SHOPIFY_INSTALLATIONS, sessionId);
+  setCookie(context, "pathminty_ops", "", {
+    httpOnly: true,
+    maxAge: 0,
+    path: "/",
+    sameSite: "Lax",
+    secure: new URL(context.req.url).protocol === "https:",
+  });
+  return context.json({ ok: true });
 });
 
 app.get("/v1/ops/session", async (context) => {

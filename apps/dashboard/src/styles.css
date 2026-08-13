@@ -1517,10 +1517,69 @@ body {
 .marketing-hero,
 .marketing-grid,
 .marketing-compare,
-.marketing-pricing {
+.marketing-pricing,
+.marketing-preview,
+.marketing-steps,
+.marketing-faq {
   max-width: 1040px;
   margin: 0 auto;
   padding: 48px 24px;
+}
+.marketing-preview img {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #0b0d0f;
+}
+.marketing-preview p,
+.marketing-steps span,
+.marketing-faq dd {
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+.marketing-steps ol {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin: 16px 0 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+.marketing-steps li {
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #0b0d0f;
+  counter-increment: step;
+}
+.marketing-steps li::before {
+  content: "0" counter(step);
+  display: block;
+  margin-bottom: 8px;
+  color: var(--green);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+.marketing-steps strong {
+  display: block;
+  margin-bottom: 6px;
+}
+.marketing-faq dl {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0 0;
+}
+.marketing-faq div {
+  padding: 16px 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #0b0d0f;
+}
+.marketing-faq dt {
+  margin-bottom: 6px;
+  font-weight: 700;
 }
 .marketing-kicker {
   color: var(--green);
@@ -1648,6 +1707,11 @@ body {
   height: 52px;
   padding: 0 16px;
   border-bottom: 1px solid var(--border);
+}
+.ops-top-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 .ops-strip {
   margin: 0;

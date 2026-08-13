@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Privacy policy · PathMinty</title>
+    <meta
+      name="description"
+      content="PathMinty privacy policy: what we collect, where it lives, and how deletion works."
+    />
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family:
+          Inter,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        background: #050607;
+        color: #e7e9ea;
+      }
+      body {
+        margin: 0;
+      }
+      a {
+        color: #00ba7c;
+      }
+      header,
+      footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 16px 24px;
+        border-bottom: 1px solid #2f3336;
+      }
+      footer {
+        border-bottom: 0;
+        border-top: 1px solid #2f3336;
+        color: #71767b;
+        font-size: 13px;
+      }
+      nav {
+        display: flex;
+        gap: 16px;
+      }
+      nav a {
+        color: #71767b;
+        text-decoration: none;
+      }
+      .brand {
+        color: #e7e9ea;
+        font-weight: 700;
+        text-decoration: none;
+      }
+      article {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 40px 24px 64px;
+      }
+      .kicker {
+        color: #00ba7c;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      h1 {
+        margin: 8px 0 16px;
+        letter-spacing: -0.6px;
+      }
+      h2 {
+        margin: 28px 0 8px;
+        font-size: 18px;
+      }
+      p,
+      li {
+        color: #b9bdc2;
+        line-height: 1.55;
+        font-size: 15px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="/">PathMinty</a>
+      <nav>
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
+        <a href="/support">Support</a>
+      </nav>
+    </header>
+    <article>
+      <p class="kicker">PathMinty</p>
+      <h1>Privacy policy</h1>
+      <p>Last updated 13 August 2026.</p>
+      <p>
+        PathMinty helps Shopify merchants understand consented storefront behavior. This
+        policy describes what we collect, why, and how to ask us to delete it.
+      </p>
+      <h2>Who we are</h2>
+      <p>
+        PathMinty is operated by the PathMinty team. Contact
+        <a href="mailto:jurius.law@gmail.com">jurius.law@gmail.com</a>.
+      </p>
+      <h2>What we collect</h2>
+      <ul>
+        <li>
+          <strong>Merchant account data:</strong> Shopify shop domain, installation
+          state, plan, and usage counts.
+        </li>
+        <li>
+          <strong>Storefront behavior (after analytics consent):</strong> page routes,
+          clicks, hover/scroll samples, viewport size, and privacy-masked session
+          recordings. Form values, keystrokes, and checkout DOM are not recorded.
+        </li>
+        <li>
+          <strong>Shopify customer events</strong> from the official Web Pixel (page,
+          product, cart, checkout started/completed). Search terms have obvious emails
+          and phone numbers masked.
+        </li>
+        <li>
+          We do not collect customer names, emails, phone numbers, addresses, or payment
+          details as product features.
+        </li>
+      </ul>
+      <h2>Where it lives</h2>
+      <p>
+        Replay files are stored in Cloudflare R2. Shop, usage, and operational facts may
+        be stored in Cloudflare KV and Neon Postgres (United States). We do not put raw
+        replay events in Postgres.
+      </p>
+      <h2>Retention</h2>
+      <p>
+        Replay retention follows the subscribed plan (14 / 30 / 60 days). Human-session
+        usage counters reset each UTC month. Uninstall or Shopify shop/redact queues
+        deletion of that shop’s replay objects and usage keys.
+      </p>
+      <h2>Consent</h2>
+      <p>
+        Recording starts only when Shopify reports that analytics processing is allowed.
+        Ad blockers and strict browsers can prevent capture.
+      </p>
+      <h2>Requests</h2>
+      <p>
+        Shopify compliance webhooks handle customer data requests and redactions.
+        Because sessions are anonymous, we cannot map a recording to a customer name or
+        email. Shop-level deletion is executed on uninstall and on
+        <code>shop/redact</code>. Email jurius.law@gmail.com for operator questions.
+      </p>
+    </article>
+    <footer>
+      <p>PathMinty · Shopify behavior intelligence</p>
+      <span>
+        <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> ·
+        <a href="/support">Support</a>
+      </span>
+    </footer>
+  </body>
+</html>

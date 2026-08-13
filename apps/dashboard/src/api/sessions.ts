@@ -309,6 +309,10 @@ export async function opsLogin(email: string, password: string): Promise<StaffUs
   return staff.data;
 }
 
+export async function opsLogout(): Promise<void> {
+  await apiRequest("/v1/ops/logout", { method: "POST" });
+}
+
 export async function getOpsSession(): Promise<StaffUser | null> {
   const response = await apiRequest("/v1/ops/session");
   if (response.status === 401) return null;

@@ -10,11 +10,38 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { STOREFRONT_CAPTURE_PATH } from "@pathminty/cloudflare";
 import {
+  PLAN_CATALOG,
   StorefrontInstallationSchema,
   type StorefrontInstallation,
 } from "@pathminty/contracts";
+import {
+  readShopHealth,
+  readSubscription,
+  readUsage,
+  resolveCaptureHealth,
+  writeSubscription,
+} from "@pathminty/db/worker";
 
 import { authenticate } from "../shopify.server";
+
+const CAPTURE_OPTOUT_KEY = (shop: string) => `capture-optout:${shop}`;
+
+function healthCopy(hint: string) {
+  switch (hint) {
+    case "awaiting_traffic":
+      return "Connected. Browse the storefront with analytics consent to see the first session.";
+    case "quota_paused":
+      return "Recording is paused — this month’s human-session cap is used. Upgrade on Plan.";
+    case "embed_silent":
+      return "Pixel events are arriving but no recordings. Enable PathMinty Recorder in the theme editor and save.";
+    case "recent_errors":
+      return "Capture hit errors in the last hour. Check the recorder embed and ad blockers.";
+    case "disconnected":
+      return "Tracking is disconnected. Connect to start capturing.";
+    default:
+      return "Capture is healthy.";
+  }
+}
 
 type BootstrapQuery = {
   data?: {
@@ -92,12 +119,33 @@ async function readInstallation(shop: string) {
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   const { session } = await authenticate.admin(request);
-  const installation = await readInstallation(session.shop);
+  const store = env.SHOPIFY_INSTALLATIONS;
+  const [installation, subscription, usage, healthRecord, optout] = await Promise.all([
+    readInstallation(session.shop),
+    readSubscription(store, session.shop),
+    readUsage(store, session.shop),
+    readShopHealth(store, session.shop),
+    store.get(CAPTURE_OPTOUT_KEY(session.shop)),
+  ]);
+  const connected = Boolean(installation?.pixelId);
+  const health = resolveCaptureHealth({
+    connected,
+    lastReplayAt: healthRecord.lastReplayAt,
+    lastPixelAt: healthRecord.lastPixelAt,
+    lastErrorCode: healthRecord.lastErrorCode,
+    lastErrorAt: healthRecord.lastErrorAt,
+    usage,
+  });
 
   return {
-    connected: Boolean(installation?.pixelId),
+    connected,
+    optedOut: Boolean(optout),
     shop: session.shop,
     themeEditorUrl: themeEditorUrl(session.shop),
+    planName: PLAN_CATALOG[subscription.planId].name,
+    planId: subscription.planId,
+    usage,
+    health,
   };
 };
 
@@ -208,6 +256,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     }
 
     await env.SHOPIFY_INSTALLATIONS.delete(installationKey(session.shop));
+    await env.SHOPIFY_INSTALLATIONS.put(CAPTURE_OPTOUT_KEY(session.shop), "1");
     return {
       ok: true,
       connected: false,
@@ -336,6 +385,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     installationKey(session.shop),
     JSON.stringify(installation),
   );
+  await env.SHOPIFY_INSTALLATIONS.delete(CAPTURE_OPTOUT_KEY(session.shop));
+  const existingPlan = await readSubscription(env.SHOPIFY_INSTALLATIONS, session.shop);
+  await writeSubscription(env.SHOPIFY_INSTALLATIONS, session.shop, {
+    planId: existingPlan.planId,
+    status: existingPlan.status,
+    updatedAt: new Date().toISOString(),
+    ...(existingPlan.shopifySubscriptionId
+      ? { shopifySubscriptionId: existingPlan.shopifySubscriptionId }
+      : {}),
+  });
 
   return {
     ok: true,
@@ -351,9 +410,12 @@ export default function Setup() {
   const shopify = useAppBridge();
   const pendingPopup = useRef<Window | null>(null);
   const openRequested = useRef(false);
+  const autoConnectStarted = useRef(false);
   const connected = fetcher.data?.connected ?? loaderData.connected;
   const isBusy = fetcher.state !== "idle";
   const isOpeningDashboard = dashboardLink.state !== "idle";
+  const usage = loaderData.usage;
+  const health = loaderData.health;
 
   useEffect(() => {
     if (fetcher.data?.message) {
@@ -362,6 +424,19 @@ export default function Setup() {
       });
     }
   }, [fetcher.data, shopify]);
+
+  useEffect(() => {
+    if (
+      loaderData.connected ||
+      loaderData.optedOut ||
+      autoConnectStarted.current ||
+      fetcher.state !== "idle"
+    ) {
+      return;
+    }
+    autoConnectStarted.current = true;
+    void fetcher.submit({ intent: "connect" }, { method: "POST" });
+  }, [fetcher, loaderData.connected, loaderData.optedOut]);
 
   // After a click, navigate the pre-opened tab to the absolute dashboard URL.
   // Opening about:blank synchronously avoids popup blockers; an in-app redirect
@@ -431,10 +506,41 @@ export default function Setup() {
           </s-paragraph>
           <s-stack direction="inline" gap="base">
             <s-badge tone={connected ? "success" : "caution"}>
-              {connected ? "Connected" : "Setup required"}
+              {connected
+                ? "Connected"
+                : loaderData.optedOut
+                  ? "Disconnected"
+                  : isBusy
+                    ? "Connecting"
+                    : "Setup required"}
             </s-badge>
             <s-text tone="neutral">{loaderData.shop}</s-text>
           </s-stack>
+        </s-stack>
+      </s-section>
+
+      <s-section heading="This month">
+        <s-stack direction="block" gap="base">
+          <s-paragraph>
+            <strong>
+              {usage.billableSessions.toLocaleString()} / {usage.limit.toLocaleString()}
+            </strong>{" "}
+            human sessions on <strong>{loaderData.planName}</strong>.{" "}
+            {usage.botSessions} bots filtered ·{" "}
+            {PLAN_CATALOG[loaderData.planId].retentionDays}-day retain.
+          </s-paragraph>
+          <s-banner
+            tone={
+              health.hint === "ok"
+                ? "success"
+                : health.hint === "quota_paused" || health.hint === "recent_errors"
+                  ? "warning"
+                  : "info"
+            }
+          >
+            {healthCopy(health.hint)}
+          </s-banner>
+          <s-link href="/app/billing">Change plan</s-link>
         </s-stack>
       </s-section>
 

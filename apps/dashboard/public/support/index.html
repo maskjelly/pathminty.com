@@ -1,0 +1,145 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Support · PathMinty</title>
+    <meta
+      name="description"
+      content="PathMinty merchant support: install, capture health, and billing."
+    />
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family:
+          Inter,
+          -apple-system,
+          BlinkMacSystemFont,
+          "Segoe UI",
+          sans-serif;
+        background: #050607;
+        color: #e7e9ea;
+      }
+      body {
+        margin: 0;
+      }
+      a {
+        color: #00ba7c;
+      }
+      header,
+      footer {
+        display: flex;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 16px 24px;
+        border-bottom: 1px solid #2f3336;
+      }
+      footer {
+        border-bottom: 0;
+        border-top: 1px solid #2f3336;
+        color: #71767b;
+        font-size: 13px;
+      }
+      nav {
+        display: flex;
+        gap: 16px;
+      }
+      nav a {
+        color: #71767b;
+        text-decoration: none;
+      }
+      .brand {
+        color: #e7e9ea;
+        font-weight: 700;
+        text-decoration: none;
+      }
+      article {
+        max-width: 720px;
+        margin: 0 auto;
+        padding: 40px 24px 64px;
+      }
+      .kicker {
+        color: #00ba7c;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+      h1 {
+        margin: 8px 0 16px;
+        letter-spacing: -0.6px;
+      }
+      h2 {
+        margin: 28px 0 8px;
+        font-size: 18px;
+      }
+      p,
+      li {
+        color: #b9bdc2;
+        line-height: 1.55;
+        font-size: 15px;
+      }
+      .cta {
+        display: inline-flex;
+        align-items: center;
+        height: 40px;
+        padding: 0 16px;
+        border-radius: 4px;
+        background: #00ba7c;
+        color: #04140e;
+        font-weight: 700;
+        text-decoration: none;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="/">PathMinty</a>
+      <nav>
+        <a href="/privacy">Privacy</a>
+        <a href="/terms">Terms</a>
+        <a href="/support">Support</a>
+      </nav>
+    </header>
+    <article>
+      <p class="kicker">PathMinty</p>
+      <h1>Support</h1>
+      <p>
+        Email <a href="mailto:jurius.law@gmail.com">jurius.law@gmail.com</a>. We read
+        every merchant note.
+      </p>
+      <h2>Get data flowing</h2>
+      <ol>
+        <li>Install PathMinty from Shopify Admin.</li>
+        <li>Open the app. Storefront connection starts automatically.</li>
+        <li>Theme editor → App embeds → enable PathMinty Recorder → Save.</li>
+        <li>Visit the storefront and accept analytics cookies if asked.</li>
+        <li>Open the dashboard. Sessions appear within about 15 seconds.</li>
+      </ol>
+      <h2>Nothing showing?</h2>
+      <ul>
+        <li>The health banner tells you if the embed is silent or quota is paused.</li>
+        <li>Ad blockers can hide the recorder. Try a normal window.</li>
+        <li>
+          Checkout pages are not DOM-recorded. That is a Shopify limit, not a bug.
+        </li>
+      </ul>
+      <h2>Billing</h2>
+      <p>
+        Change plans in Shopify Admin → PathMinty → Plan. Usage on the dashboard always
+        matches the subscribed cap. Human sessions only; bots do not eat quota.
+        Recording pauses at the cap.
+      </p>
+      <p>
+        <a class="cta" href="mailto:jurius.law@gmail.com">Email support</a>
+      </p>
+    </article>
+    <footer>
+      <p>PathMinty · Shopify behavior intelligence</p>
+      <span>
+        <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> ·
+        <a href="/support">Support</a>
+      </span>
+    </footer>
+  </body>
+</html>

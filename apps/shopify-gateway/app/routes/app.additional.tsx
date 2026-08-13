@@ -1,4 +1,14 @@
+import { env } from "cloudflare:workers";
+import { useLoaderData } from "react-router";
+
+export const loader = () => ({
+  privacyUrl: `${env.PATHMINTY_DASHBOARD_URL}/privacy`,
+  termsUrl: `${env.PATHMINTY_DASHBOARD_URL}/terms`,
+  supportUrl: `${env.PATHMINTY_DASHBOARD_URL}/support`,
+});
+
 export default function DataProtection() {
+  const { privacyUrl, termsUrl, supportUrl } = useLoaderData<typeof loader>();
   return (
     <s-page heading="Data protection">
       <s-section heading="Safe recording defaults">
@@ -12,6 +22,25 @@ export default function DataProtection() {
           <s-list-item>Replay data is isolated by Shopify store.</s-list-item>
           <s-list-item>
             Customer deletion requests are handled through Shopify compliance webhooks.
+          </s-list-item>
+        </s-unordered-list>
+      </s-section>
+      <s-section heading="Policies">
+        <s-unordered-list>
+          <s-list-item>
+            <s-link href={privacyUrl} target="_blank">
+              Privacy policy
+            </s-link>
+          </s-list-item>
+          <s-list-item>
+            <s-link href={termsUrl} target="_blank">
+              Terms of use
+            </s-link>
+          </s-list-item>
+          <s-list-item>
+            <s-link href={supportUrl} target="_blank">
+              Support
+            </s-link>
           </s-list-item>
         </s-unordered-list>
       </s-section>

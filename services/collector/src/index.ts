@@ -54,6 +54,31 @@ function parseJson(bytes: Uint8Array): unknown {
   return JSON.parse(decoder.decode(bytes)) as unknown;
 }
 
+async function reportCollectorFailure(
+  installations: KVNamespace,
+  shopId: string,
+  requestId: string,
+  code: string,
+  message: string,
+) {
+  const at = new Date().toISOString();
+  await Promise.all([
+    writeShopHealth(installations, shopId, {
+      lastErrorCode: code,
+      lastErrorAt: at,
+    }),
+    pushPipelineEvent(installations, {
+      shopId,
+      service: "collector",
+      level: "error",
+      code,
+      message,
+      requestId,
+      at,
+    }),
+  ]);
+}
+
 function errorResponse(
   requestId: string,
   status: 400 | 401 | 402 | 413 | 415 | 500,
@@ -74,6 +99,7 @@ app.get("/healthz", (context) =>
 
 app.post("/v1/replay-batches", async (context) => {
   const requestId = crypto.randomUUID();
+  let shopId: string | undefined;
 
   try {
     const contentType = context.req.header("content-type")?.split(";", 1)[0];
@@ -95,6 +121,7 @@ app.post("/v1/replay-batches", async (context) => {
     }
 
     const result = ReplayBatchSchema.safeParse(input);
+    if (result.success) shopId = result.data.shopId;
     if (!result.success) {
       log("warn", "replay_batch_rejected", {
         requestId,
@@ -195,12 +222,24 @@ app.post("/v1/replay-batches", async (context) => {
     }
 
     log("error", "replay_batch_failed", { requestId }, error);
+    if (shopId) {
+      context.executionCtx.waitUntil(
+        reportCollectorFailure(
+          context.env.SHOPIFY_INSTALLATIONS,
+          shopId,
+          requestId,
+          "internal_error",
+          "Collector failed to accept a replay batch.",
+        ),
+      );
+    }
     return errorResponse(requestId, 500, "internal_error", "Unable to accept batch");
   }
 });
 
 app.post("/v1/shopify-events", async (context) => {
   const requestId = crypto.randomUUID();
+  let shopId: string | undefined;
 
   try {
     const contentType = context.req.header("content-type")?.split(";", 1)[0];
@@ -222,6 +261,7 @@ app.post("/v1/shopify-events", async (context) => {
     }
 
     const result = ShopifyPixelEventSchema.safeParse(input);
+    if (result.success) shopId = result.data.shopId;
     if (!result.success) {
       return errorResponse(
         requestId,
@@ -291,6 +331,17 @@ app.post("/v1/shopify-events", async (context) => {
     }
 
     log("error", "shopify_event_failed", { requestId }, error);
+    if (shopId) {
+      context.executionCtx.waitUntil(
+        reportCollectorFailure(
+          context.env.SHOPIFY_INSTALLATIONS,
+          shopId,
+          requestId,
+          "internal_error",
+          "Collector failed to accept a Shopify event.",
+        ),
+      );
+    }
     return errorResponse(requestId, 500, "internal_error", "Unable to accept event");
   }
 });

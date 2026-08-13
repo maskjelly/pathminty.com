@@ -8,6 +8,7 @@ import {
   getOpsSession,
   listOpsStaff,
   opsLogin,
+  opsLogout,
   opsOverridePlan,
 } from "../api/sessions";
 import { BrandMark } from "../BrandMark";
@@ -123,8 +124,34 @@ export function OpsApp() {
           <BrandMark size={28} />
           Ops
         </div>
-        <span>
+        <span className="ops-top-actions">
           {staff.name} · {staff.role}
+          <button
+            className="control"
+            onClick={() => {
+              void getOpsFleet()
+                .then(setFleet)
+                .catch((caught: unknown) => {
+                  setError(caught instanceof Error ? caught.message : "Fleet failed.");
+                });
+            }}
+            type="button"
+          >
+            Refresh
+          </button>
+          <button
+            className="control"
+            onClick={() => {
+              void opsLogout().then(() => {
+                setStaff(null);
+                setFleet(null);
+                setStatus("login");
+              });
+            }}
+            type="button"
+          >
+            Sign out
+          </button>
         </span>
       </header>
       {error ? (

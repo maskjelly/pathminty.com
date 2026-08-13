@@ -21,7 +21,16 @@
     "directory": "./dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/healthz", "/v1/*"],
+    "run_worker_first": [
+      "/healthz",
+      "/v1/*",
+      "/privacy",
+      "/privacy/",
+      "/terms",
+      "/terms/",
+      "/support",
+      "/support/",
+    ],
   },
   "env": {
     "staging": {

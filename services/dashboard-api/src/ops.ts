@@ -10,19 +10,21 @@ import {
   ackPipelineEvent,
   authenticateStaff,
   createStaffSession,
+  deleteStaffSession,
   ensureBootstrapStaff,
   listPipelineEvents,
   listStaffFromKv,
   readShopHealth,
+  readStaffSession,
   readSubscription,
   readUsage,
-  readStaffSession,
   resolveCaptureHealth,
   upsertStaffInKv,
   type BillingStore,
 } from "@pathminty/db/worker";
 
 type KvStore = BillingStore & {
+  delete(key: string): Promise<void>;
   list(options: { prefix: string }): Promise<{ keys: Array<{ name: string }> }>;
 };
 
@@ -68,6 +70,11 @@ export async function issueStaffCookie(
 export async function staffFromCookie(store: KvStore, sessionId: string | undefined) {
   if (!sessionId) return null;
   return readStaffSession(store, sessionId);
+}
+
+export async function clearStaffCookie(store: KvStore, sessionId: string | undefined) {
+  if (!sessionId) return;
+  await deleteStaffSession(store, sessionId);
 }
 
 export async function listStaff(store: KvStore) {

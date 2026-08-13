@@ -154,7 +154,7 @@ export function SupportPage() {
       <h2>Get data flowing</h2>
       <ol>
         <li>Install PathMinty from Shopify Admin.</li>
-        <li>Click Connect storefront.</li>
+        <li>Open the app. Storefront connection starts automatically.</li>
         <li>Theme editor → App embeds → enable PathMinty Recorder → Save.</li>
         <li>Visit the storefront and accept analytics cookies if asked.</li>
         <li>Open the dashboard. Sessions appear within about 15 seconds.</li>

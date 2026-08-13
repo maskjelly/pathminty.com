@@ -28,6 +28,7 @@ export function Landing() {
         </a>
         <nav>
           <a href="#why">Why</a>
+          <a href="#how">How</a>
           <a href="#pricing">Pricing</a>
           <a href="/support">Support</a>
           <a className="marketing-cta" href={SHOPIFY_INSTALL_URL}>
@@ -57,6 +58,34 @@ export function Landing() {
           No credit card to start. Enable the theme embed once. First session in about
           15 seconds.
         </p>
+      </section>
+
+      <section className="marketing-preview" aria-label="Product preview">
+        <img
+          alt="Click heatmap over a fashion collection page, showing attention on filters and featured products"
+          src="/assets/heavenly-heatmap.png"
+        />
+        <p>
+          Heatmaps over the real page. Click a route on the site canvas to drill in.
+        </p>
+      </section>
+
+      <section className="marketing-steps" id="how">
+        <h2>Live in one coffee</h2>
+        <ol>
+          <li>
+            <strong>Install from Shopify</strong>
+            <span>OAuth only. We never ask you to type a store domain.</span>
+          </li>
+          <li>
+            <strong>Enable the recorder embed</strong>
+            <span>One toggle in the theme editor. No theme files edited.</span>
+          </li>
+          <li>
+            <strong>Watch the first session</strong>
+            <span>Consent first. Inputs masked. Dashboard updates in ~15s.</span>
+          </li>
+        </ol>
       </section>
 
       <section className="marketing-grid" id="why">
@@ -145,6 +174,33 @@ export function Landing() {
             </article>
           ))}
         </div>
+      </section>
+
+      <section className="marketing-faq" id="faq">
+        <h2>Straight answers</h2>
+        <dl>
+          <div>
+            <dt>Do bots burn my quota?</dt>
+            <dd>No. Only human sessions count. One-second pogo-stabs are filtered.</dd>
+          </div>
+          <div>
+            <dt>What happens at the cap?</dt>
+            <dd>Recording pauses. We do not silent-sample or surprise-upgrade you.</dd>
+          </div>
+          <div>
+            <dt>Is checkout recorded?</dt>
+            <dd>
+              Checkout DOM is skipped — a Shopify hosting limit. We still see checkout
+              started/completed events from the official Web Pixel.
+            </dd>
+          </div>
+          <div>
+            <dt>Can I map a recording to a customer?</dt>
+            <dd>
+              No. Sessions are anonymous. Form values and keystrokes are never stored.
+            </dd>
+          </div>
+        </dl>
       </section>
 
       <footer className="marketing-footer">
