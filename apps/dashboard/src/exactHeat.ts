@@ -20,12 +20,21 @@ function paintClicks(
     const y = point.y * height;
     const bloom = clickShouldBloom(point.weight, maxWeight);
     if (!bloom) {
+      const halo = compact ? 11 : 16;
+      const glow = context.createRadialGradient(x, y, 0, x, y, halo);
+      glow.addColorStop(0, "rgba(239, 68, 68, 0.42)");
+      glow.addColorStop(0.45, "rgba(249, 115, 22, 0.18)");
+      glow.addColorStop(1, "rgba(250, 204, 21, 0)");
+      context.fillStyle = glow;
       context.beginPath();
-      context.fillStyle = "rgba(220, 38, 38, 0.92)";
+      context.arc(x, y, halo, 0, Math.PI * 2);
+      context.fill();
+      context.beginPath();
+      context.fillStyle = "rgba(220, 38, 38, 0.95)";
       context.arc(x, y, pin, 0, Math.PI * 2);
       context.fill();
       context.beginPath();
-      context.strokeStyle = "rgba(255, 255, 255, 0.85)";
+      context.strokeStyle = "rgba(255, 255, 255, 0.9)";
       context.lineWidth = compact ? 1 : 1.25;
       context.arc(x, y, pin, 0, Math.PI * 2);
       context.stroke();
