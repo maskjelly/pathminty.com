@@ -51,13 +51,74 @@ export const MAX_FRAMES = 16;
 export const MAX_EDGES = 24;
 export const COLUMN_TITLES = ["Home", "Browse", "Product", "Checkout"] as const;
 
+const LOCALE_ROOT = /^\/[a-z]{2}(?:-[a-z]{2})?$/iu;
+const LOCALE_PREFIX =
+  /^\/[a-z]{2}(?:-[a-z]{2})?(?=\/(?:products|collections|cart|checkout|checkouts|pages|blogs|articles|search)(?:\/|$))/iu;
+
+/** Drop Shopify Markets / locale prefixes so /en-us and /en-us/products/x classify. */
+export function storefrontPath(route: string): string {
+  const path = (route.split(/[?#]/u, 1)[0] ?? "/").replace(/\/+$/u, "") || "/";
+  if (LOCALE_ROOT.test(path)) return "/";
+  const stripped = path.replace(LOCALE_PREFIX, "");
+  return stripped.startsWith("/") ? stripped : `/${stripped}`;
+}
+
+/** Store homepage, including Shopify Markets locale roots like /en-us. */
+export function isHomeRoute(route: string): boolean {
+  const r = storefrontPath(route).toLowerCase();
+  return (
+    r === "/" ||
+    r === "/index" ||
+    r === "/home" ||
+    r === "/pages/home" ||
+    r === "/pages/frontpage"
+  );
+}
+
+export function displayRouteLabel(route: string): string {
+  if (isHomeRoute(route)) return "Home";
+  return shortPath(route);
+}
+
+export function resolveHomeRoute(
+  routes: readonly string[],
+  extra: readonly string[] = [],
+): string {
+  for (const route of [...routes, ...extra]) {
+    if (isHomeRoute(route)) return route;
+  }
+  return "/";
+}
+
+export function pinHomePath(
+  paths: readonly string[],
+  extra: readonly string[] = [],
+): string[] {
+  const home = resolveHomeRoute(paths, extra);
+  return [home, ...paths.filter((path) => path !== home)];
+}
+
+/**
+ * Trackpad pinch / ctrl-wheel → small scale steps.
+ * Discrete 0.9/1.11 per event made a tiny pinch jump several zoom levels.
+ */
+export function wheelZoomFactor(deltaY: number, deltaMode = 0): number {
+  const pixels =
+    deltaMode === 1 ? deltaY * 16 : deltaMode === 2 ? deltaY * 800 : deltaY;
+  const raw = 2 ** (-pixels / 720);
+  return Math.min(1.035, Math.max(0.966, raw));
+}
+
+export const TOOLBAR_ZOOM_IN = 1.06;
+export const TOOLBAR_ZOOM_OUT = 1 / 1.06;
+
 export function classifyRoute(route: string): {
   kind: StationKind;
   label: string;
   column: number;
 } {
-  const r = route.toLowerCase();
-  if (r === "/" || r === "") {
+  const r = storefrontPath(route).toLowerCase();
+  if (isHomeRoute(route) || r === "") {
     return { kind: "home", label: "Home", column: 0 };
   }
   if (r === "/cart" || r.startsWith("/cart/")) {
@@ -117,9 +178,14 @@ export function pickFrameRoutes(
   for (const node of journey?.nodes ?? []) {
     scores.set(node.route, Math.max(scores.get(node.route) ?? 0, node.sessionCount));
   }
-  const required: string[] = [];
+  const home = resolveHomeRoute(
+    [...scores.keys()],
+    (journey?.nodes ?? []).map((node) => node.route),
+  );
+  const required: string[] = [home];
   const rest: Array<[string, number]> = [];
   for (const [route, score] of scores) {
+    if (route === home) continue;
     const kind = classifyRoute(route).kind;
     if (kind === "home" || kind === "cart" || kind === "checkout") required.push(route);
     else rest.push([route, score]);

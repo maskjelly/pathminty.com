@@ -762,6 +762,42 @@ describe("time range and route index", () => {
     expect(index.routes[0]?.route).toBe("/hot");
   });
 
+  it("always pins the homepage first even when it is quieter than products", () => {
+    const product = summaryWith({
+      sessionId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      routes: ["/products/hot"],
+      entryRoute: "/products/hot",
+      exitRoute: "/products/hot",
+      clicks: [
+        { at: now - 1_000, route: "/products/hot", x: 0.2, y: 0.2 },
+        { at: now - 2_000, route: "/products/hot", x: 0.3, y: 0.3 },
+        { at: now - 3_000, route: "/products/hot", x: 0.4, y: 0.4 },
+      ],
+      startedAt: new Date(now - 10_000).toISOString(),
+      lastSeenAt: new Date(now - 1_000).toISOString(),
+      endedAt: new Date(now - 1_000).toISOString(),
+    });
+    const home = summaryWith({
+      sessionId: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+      routes: ["/"],
+      entryRoute: "/",
+      exitRoute: "/",
+      clicks: [],
+      startedAt: new Date(now - 10_000).toISOString(),
+      lastSeenAt: new Date(now - 1_000).toISOString(),
+      endedAt: new Date(now - 1_000).toISOString(),
+    });
+    const index = buildRouteIndex({
+      sessions: [product, home],
+      fromMs: now - 60_000,
+      toMs: now,
+      mode: "click",
+      sort: "most_active",
+      limit: 1,
+    });
+    expect(index.routes.map((route) => route.route)).toEqual(["/"]);
+  });
+
   it("buildActivityTimeline buckets events", () => {
     const session = summaryWith({
       routes: ["/"],

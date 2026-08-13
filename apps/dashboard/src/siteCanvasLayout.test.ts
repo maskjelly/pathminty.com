@@ -7,8 +7,10 @@ import {
   FRAME_W,
   buildFlowEdges,
   classifyRoute,
-  placeFrames,
+  isHomeRoute,
   pickFrameRoutes,
+  placeFrames,
+  wheelZoomFactor,
 } from "./siteCanvasLayout";
 
 function stat(route: string, sessionCount: number): RouteStat {
@@ -129,6 +131,31 @@ describe("classifyRoute", () => {
       kind: "checkout",
       column: 3,
     });
+    expect(classifyRoute("/en-us")).toMatchObject({ kind: "home", column: 0 });
+    expect(classifyRoute("/en-us/products/tee")).toMatchObject({
+      kind: "product",
+      column: 2,
+    });
+  });
+
+  it("treats locale roots and common homepage paths as Home", () => {
+    expect(isHomeRoute("/")).toBe(true);
+    expect(isHomeRoute("/en-us")).toBe(true);
+    expect(isHomeRoute("/pages/home")).toBe(true);
+    expect(isHomeRoute("/products/tee")).toBe(false);
+  });
+
+  it("always keeps a Home frame even when it is missing from the route list", () => {
+    const picked = pickFrameRoutes([stat("/products/tee", 9)], null);
+    expect(picked[0]).toBe("/");
+    expect(picked).toContain("/products/tee");
+  });
+
+  it("keeps pinch zoom to small steps", () => {
+    expect(wheelZoomFactor(4)).toBeGreaterThan(0.99);
+    expect(wheelZoomFactor(4)).toBeLessThan(1);
+    expect(wheelZoomFactor(-4)).toBeLessThan(1.02);
+    expect(wheelZoomFactor(80)).toBeGreaterThan(0.96);
   });
 });
 

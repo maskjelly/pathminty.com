@@ -48,6 +48,7 @@ import { CanvasToolbar } from "./components/CanvasToolbar";
 import { HeatmapSurface } from "./components/HeatmapSurface";
 import { ReplayViewer } from "./components/ReplayViewer";
 import { SiteCanvas, type SiteCanvasHandle } from "./components/SiteCanvas";
+import { displayRouteLabel, isHomeRoute, pinHomePath } from "./siteCanvasLayout";
 
 type View = "Heatmaps" | "Recordings" | "Settings";
 type HeatmapPane = "map" | "route";
@@ -110,6 +111,13 @@ function shopLabel(shopId: string) {
   return shopId.replace(/\.myshopify\.com$/u, "");
 }
 
+function sessionTouchesHome(session: SessionSummary) {
+  return (
+    isHomeRoute(session.entryRoute) ||
+    session.routes.some((route) => isHomeRoute(route))
+  );
+}
+
 function EmptySessions({ onRefresh }: { onRefresh: () => void }) {
   return (
     <section className="live-empty">
@@ -159,7 +167,7 @@ function SessionRows({
             <Play size={13} weight="fill" />
           </span>
           <span>
-            <strong>{session.entryRoute}</strong>
+            <strong>{displayRouteLabel(session.entryRoute)}</strong>
             <small>
               {session.status === "active" ? "Active · " : "Ended · "}
               last seen {relativeTime(session.lastSeenAt)} ·{" "}
@@ -217,6 +225,7 @@ export function LiveDashboard() {
   const [workspace, setWorkspace] = useState<ShopWorkspace | null>(null);
   const [hideBots, setHideBots] = useState(true);
   const [sessionQuery, setSessionQuery] = useState("");
+  const [pageFilter, setPageFilter] = useState("all");
   const [planBusy, setPlanBusy] = useState(false);
   const [canvasScale, setCanvasScale] = useState(0.35);
   const canvasRef = useRef<SiteCanvasHandle | null>(null);
@@ -274,20 +283,19 @@ export function LiveDashboard() {
         setRouteIndex(routes);
         setActivity(timeline);
         setJourney(graph);
-        const paths = routes.routes.map((item) => item.route);
-        if (paths.length > 0) {
-          const batch = await getHeatmapBatch(shop, {
-            routes: paths,
-            device,
-            mode: heatmapMode,
-            time: timeQuery,
-            snapshot: true,
-            snapshotLimit: 12,
-          });
-          setMiniHeatmaps((previous) => mergeHeatmaps(previous, batch, true));
-        } else {
-          setMiniHeatmaps({});
-        }
+        const paths = pinHomePath(
+          routes.routes.map((item) => item.route),
+          (graph?.nodes ?? []).map((node) => node.route),
+        );
+        const batch = await getHeatmapBatch(shop, {
+          routes: paths,
+          device,
+          mode: heatmapMode,
+          time: timeQuery,
+          snapshot: true,
+          snapshotLimit: 12,
+        });
+        setMiniHeatmaps((previous) => mergeHeatmaps(previous, batch, true));
         setError("");
       } catch (caught) {
         setError(caught instanceof Error ? caught.message : "Unable to load site map.");
@@ -300,7 +308,10 @@ export function LiveDashboard() {
 
   const loadHeatMode = useCallback(
     async (shop: string, mode: HeatmapMode) => {
-      const paths = routeIndex?.routes.map((item) => item.route) ?? [];
+      const paths = pinHomePath(
+        routeIndex?.routes.map((item) => item.route) ?? [],
+        (journey?.nodes ?? []).map((node) => node.route),
+      );
       if (paths.length === 0) return;
       try {
         const batch = await getHeatmapBatch(shop, {
@@ -315,7 +326,7 @@ export function LiveDashboard() {
         // Keep the last overlay if a mode refresh fails.
       }
     },
-    [device, routeIndex?.routes, timeQuery],
+    [device, journey?.nodes, routeIndex?.routes, timeQuery],
   );
 
   // Route-scoped timeline while drilling into a page heatmap.
@@ -544,6 +555,31 @@ export function LiveDashboard() {
     }
     void loadSiteMap(shopId);
   };
+
+  const recordingSessions = useMemo(() => {
+    const matched = sessions.filter((session) => {
+      if (pageFilter === "all") return true;
+      if (pageFilter === "home") return sessionTouchesHome(session);
+      return session.entryRoute === pageFilter || session.routes.includes(pageFilter);
+    });
+    return [...matched].sort((left, right) => {
+      const leftHome = sessionTouchesHome(left);
+      const rightHome = sessionTouchesHome(right);
+      if (leftHome !== rightHome) return leftHome ? -1 : 1;
+      return 0;
+    });
+  }, [pageFilter, sessions]);
+
+  const recordingPages = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const session of sessions) {
+      counts.set(session.entryRoute, (counts.get(session.entryRoute) ?? 0) + 1);
+    }
+    const rest = [...counts.keys()]
+      .filter((route) => !isHomeRoute(route))
+      .sort((left, right) => (counts.get(right) ?? 0) - (counts.get(left) ?? 0));
+    return { rest: rest.slice(0, 6) };
+  }, [sessions]);
 
   const activeCount = sessions.filter((session) => session.status === "active").length;
   const dataStatus =
@@ -871,7 +907,42 @@ export function LiveDashboard() {
                     Hide bots
                   </label>
                 </section>
-                <SessionRows sessions={sessions} onOpen={openReplay} />
+                <div className="page-chips" aria-label="Page">
+                  <button
+                    data-active={pageFilter === "all"}
+                    onClick={() => setPageFilter("all")}
+                    type="button"
+                  >
+                    All
+                  </button>
+                  <button
+                    data-active={pageFilter === "home"}
+                    onClick={() => setPageFilter("home")}
+                    type="button"
+                  >
+                    Home
+                  </button>
+                  {recordingPages.rest.map((route) => (
+                    <button
+                      data-active={pageFilter === route}
+                      key={route}
+                      onClick={() => setPageFilter(route)}
+                      title={route}
+                      type="button"
+                    >
+                      {displayRouteLabel(route)}
+                    </button>
+                  ))}
+                </div>
+                {recordingSessions.length === 0 ? (
+                  <p className="site-map-status">
+                    {pageFilter === "home"
+                      ? "No homepage recordings in this range."
+                      : "No recordings match this page."}
+                  </p>
+                ) : (
+                  <SessionRows sessions={recordingSessions} onOpen={openReplay} />
+                )}
               </section>
             </div>
           ))}

@@ -27,8 +27,10 @@ import {
   placeFrames,
   placeSources,
   shortPath,
+  TOOLBAR_ZOOM_IN,
+  TOOLBAR_ZOOM_OUT,
+  wheelZoomFactor,
   worldSize,
-  type PageFrame,
 } from "../siteCanvasLayout";
 import { RouteCardPreview } from "./RouteCardPreview";
 
@@ -142,8 +144,8 @@ export const SiteCanvas = forwardRef<
   useImperativeHandle(
     ref,
     () => ({
-      zoomIn: () => zoomFromCenter(1.15),
-      zoomOut: () => zoomFromCenter(0.87),
+      zoomIn: () => zoomFromCenter(TOOLBAR_ZOOM_IN),
+      zoomOut: () => zoomFromCenter(TOOLBAR_ZOOM_OUT),
       fitAll,
       scale,
     }),
@@ -153,13 +155,6 @@ export const SiteCanvas = forwardRef<
   useEffect(() => {
     onScaleChange?.(scale);
   }, [onScaleChange, scale]);
-
-  const zoomToFrame = useCallback(
-    (frame: PageFrame) => {
-      fitRect(frame.x - 24, frame.y - 28, FRAME_W + 48, FRAME_H + 56);
-    },
-    [fitRect],
-  );
 
   useEffect(() => {
     const key = frames.map((frame) => frame.route).join("|");
@@ -181,7 +176,11 @@ export const SiteCanvas = forwardRef<
   const onWheel = (event: React.WheelEvent) => {
     event.preventDefault();
     if (event.ctrlKey || event.metaKey) {
-      zoomAt(event.clientX, event.clientY, event.deltaY > 0 ? 0.9 : 1.11);
+      zoomAt(
+        event.clientX,
+        event.clientY,
+        wheelZoomFactor(event.deltaY, event.deltaMode),
+      );
       return;
     }
     setTx((current) => current - event.deltaX);
@@ -341,7 +340,6 @@ export const SiteCanvas = forwardRef<
               <article
                 className="site-page"
                 key={frame.route}
-                onClick={() => zoomToFrame(frame)}
                 onDoubleClick={(event) => {
                   event.stopPropagation();
                   onOpenRoute(frame.route);

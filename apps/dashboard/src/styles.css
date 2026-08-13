@@ -445,6 +445,32 @@ body {
   border-bottom: 1px solid var(--border);
   background: var(--bg);
 }
+.page-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px 0;
+}
+.page-chips button {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  color: var(--text-secondary);
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.page-chips button:hover {
+  color: var(--text);
+  background: var(--bg-hover);
+}
+.page-chips button[data-active="true"] {
+  color: #fff;
+  border-color: #1d9bf0;
+  background: #1d9bf033;
+}
 .live-toolbar label,
 .route-search,
 .route-sort {

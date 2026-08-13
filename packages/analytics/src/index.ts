@@ -258,7 +258,7 @@ export function buildRouteIndex(input: {
 
   const totalEvents = stats.reduce((sum, route) => sum + route.eventCount, 0);
   return {
-    routes: sorted.slice(0, limit),
+    routes: pinHomeRoutes(sorted, limit),
     mostActive,
     leastActive,
     totalSessions: sessions.length,
@@ -270,6 +270,35 @@ export function buildRouteIndex(input: {
     from: new Date(input.fromMs).toISOString(),
     to: new Date(input.toMs).toISOString(),
   };
+}
+
+const HOME_LOCALE_ROOT = /^\/[a-z]{2}(?:-[a-z]{2})?$/iu;
+const HOME_LOCALE_PREFIX =
+  /^\/[a-z]{2}(?:-[a-z]{2})?(?=\/(?:products|collections|cart|checkout|checkouts|pages|blogs|articles|search)(?:\/|$))/iu;
+
+/** Store homepage, including Shopify Markets locale roots like /en-us. */
+export function isHomeRoute(route: string): boolean {
+  const path = (route.split(/[?#]/u, 1)[0] ?? "/").replace(/\/+$/u, "") || "/";
+  const stripped = HOME_LOCALE_ROOT.test(path)
+    ? "/"
+    : path.replace(HOME_LOCALE_PREFIX, "") || "/";
+  const r = stripped.toLowerCase();
+  return (
+    r === "/" ||
+    r === "/index" ||
+    r === "/home" ||
+    r === "/pages/home" ||
+    r === "/pages/frontpage"
+  );
+}
+
+function pinHomeRoutes<T extends { route: string }>(
+  sorted: readonly T[],
+  limit: number,
+): T[] {
+  const homes = sorted.filter((item) => isHomeRoute(item.route));
+  const rest = sorted.filter((item) => !isHomeRoute(item.route));
+  return [...homes, ...rest.slice(0, Math.max(0, limit - homes.length))];
 }
 
 /** Behavioral checkout proxy — not verified purchase until order join lands. */
@@ -384,14 +413,14 @@ export function buildJourneyGraph(input: {
     .map(([route, set]) => ({ route, count: set.size }))
     .sort((a, b) => b.count - a.count || a.route.localeCompare(b.route));
 
-  // Keep top nodes by traffic, but always include landing (/) and any checkout routes.
+  // Keep top nodes by traffic, but always include the homepage and checkouts.
   const keep = new Set<string>();
   for (const item of rankedRoutes) {
     if (keep.size >= maxNodes) break;
     keep.add(item.route);
   }
   for (const route of nodeSessions.keys()) {
-    if (route === "/" || isCheckoutRoute(route)) keep.add(route);
+    if (isHomeRoute(route) || isCheckoutRoute(route)) keep.add(route);
   }
 
   const nodes: JourneyNode[] = [...keep].map((route) => {
@@ -405,7 +434,7 @@ export function buildJourneyGraph(input: {
       checkoutRate: sessionCount > 0 ? checkoutReachCount / sessionCount : 0,
       orderCount,
       netRevenueMinor: nodeRevenue.get(route) ?? 0,
-      isLanding: route === "/",
+      isLanding: isHomeRoute(route),
       isCheckout: isCheckoutRoute(route),
       layer: nodeLayer.get(route) ?? 0,
     };
