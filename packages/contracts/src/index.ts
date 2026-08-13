@@ -310,7 +310,7 @@ export const PLAN_CATALOG = {
     features: [
       "Everything in Launch",
       "50,000 human sessions / month",
-      "Team roles (owner / analyst / viewer)",
+      "Whole team via Shopify Admin",
       "Priority capture diagnostics",
       "60-day replay storage",
     ],

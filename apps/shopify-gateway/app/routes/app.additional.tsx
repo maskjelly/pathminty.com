@@ -10,22 +10,22 @@ export const loader = () => ({
 export default function DataProtection() {
   const { privacyUrl, termsUrl, supportUrl } = useLoaderData<typeof loader>();
   return (
-    <s-page heading="Data protection">
-      <s-section heading="Safe recording defaults">
+    <s-page heading="Your shoppers stay private">
+      <s-section heading="What PathMinty records">
+        <s-paragraph>
+          Clicks, scroll, page paths, and a privacy-masked recording of the storefront.
+          That’s it.
+        </s-paragraph>
         <s-unordered-list>
+          <s-list-item>Never passwords, emails, or form values.</s-list-item>
+          <s-list-item>Checkout pages are not filmed.</s-list-item>
           <s-list-item>
-            PathMinty never captures passwords or form-field values.
+            Recording waits for analytics cookies if you use them.
           </s-list-item>
-          <s-list-item>
-            DOM targets use structural paths, not customer-visible text.
-          </s-list-item>
-          <s-list-item>Replay data is isolated by Shopify store.</s-list-item>
-          <s-list-item>
-            Customer deletion requests are handled through Shopify compliance webhooks.
-          </s-list-item>
+          <s-list-item>Each store’s data stays in its own locker.</s-list-item>
         </s-unordered-list>
       </s-section>
-      <s-section heading="Policies">
+      <s-section heading="Need the legal pages?">
         <s-unordered-list>
           <s-list-item>
             <s-link href={privacyUrl} target="_blank">
@@ -34,7 +34,7 @@ export default function DataProtection() {
           </s-list-item>
           <s-list-item>
             <s-link href={termsUrl} target="_blank">
-              Terms of use
+              Terms
             </s-link>
           </s-list-item>
           <s-list-item>
@@ -44,11 +44,10 @@ export default function DataProtection() {
           </s-list-item>
         </s-unordered-list>
       </s-section>
-      <s-section slot="aside" heading="Retention">
+      <s-section slot="aside" heading="How long we keep it">
         <s-paragraph>
-          Replay retention follows your plan: 14 days on Free, 30 on Launch, 60 on
-          Growth. Human-session counts reset each UTC month. Aggregated route stats can
-          remain after raw replay chunks expire.
+          Recordings stick around 14 days on Free, 30 on Launch, 60 on Growth. Uninstall
+          and we delete the shop’s recordings.
         </s-paragraph>
       </s-section>
     </s-page>

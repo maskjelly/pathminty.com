@@ -38,13 +38,11 @@ export function Landing() {
       </header>
 
       <section className="marketing-hero">
-        <p className="marketing-kicker">Built for DTC. Not another generic heatmap.</p>
+        <p className="marketing-kicker">For Shopify stores</p>
         <h1>Watch shoppers move. Fix the pages that lose the sale.</h1>
         <p className="marketing-lead">
-          PathMinty is session replay, heatmaps, and journeys for Shopify stores —
-          same-origin capture, consent-aware, and billed on human sessions. Microsoft
-          Clarity is free and generic. We are the behavior lab that lives next to your
-          theme.
+          Heatmaps, journeys, and privacy-masked recordings — billed on real human
+          visits, not bots. Install free. First session in about 15 seconds.
         </p>
         <div className="marketing-actions">
           <a className="marketing-cta primary" href={SHOPIFY_INSTALL_URL}>
@@ -98,7 +96,7 @@ export function Landing() {
       </section>
 
       <section className="marketing-compare">
-        <h2>Why merchants leave Clarity and Lucky Orange</h2>
+        <h2>Why stores pick PathMinty</h2>
         <table>
           <thead>
             <tr>
@@ -207,7 +205,7 @@ export function Landing() {
         <p>PathMinty · Shopify behavior intelligence</p>
         <span>
           <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> ·{" "}
-          <a href="/support">Support</a> · <a href="/ops">Staff</a>
+          <a href="/support">Support</a>
         </span>
       </footer>
     </div>

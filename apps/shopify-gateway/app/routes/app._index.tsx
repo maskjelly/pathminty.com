@@ -418,11 +418,11 @@ export default function Setup() {
   const health = loaderData.health;
 
   useEffect(() => {
-    if (fetcher.data?.message) {
-      shopify.toast.show(fetcher.data.message, {
-        isError: fetcher.data.ok === false,
-      });
-    }
+    if (!fetcher.data?.message) return;
+    if (autoConnectStarted.current && fetcher.data.ok !== false) return;
+    shopify.toast.show(fetcher.data.message, {
+      isError: fetcher.data.ok === false,
+    });
   }, [fetcher.data, shopify]);
 
   useEffect(() => {
@@ -475,47 +475,100 @@ export default function Setup() {
     void dashboardLink.load("/app/dashboard-link");
   };
 
-  return (
-    <s-page heading="PathMinty">
-      {connected ? (
-        <s-button
-          slot="primary-action"
-          onClick={openDashboard}
-          {...(isOpeningDashboard ? { loading: true } : {})}
-          variant="primary"
-        >
-          Open dashboard
-        </s-button>
-      ) : (
-        <s-button
-          slot="primary-action"
-          onClick={connect}
-          {...(isBusy ? { loading: true } : {})}
-          variant="primary"
-        >
-          Connect storefront
-        </s-button>
-      )}
+  const live = connected && Boolean(health.lastReplayAt);
+  const storefrontUrl = `https://${loaderData.shop}`;
+  const primary = !connected ? (
+    <s-button
+      slot="primary-action"
+      onClick={connect}
+      {...(isBusy ? { loading: true } : {})}
+      variant="primary"
+    >
+      {isBusy ? "Connecting…" : "Connect store"}
+    </s-button>
+  ) : live ? (
+    <s-button
+      slot="primary-action"
+      onClick={openDashboard}
+      {...(isOpeningDashboard ? { loading: true } : {})}
+      variant="primary"
+    >
+      Open dashboard
+    </s-button>
+  ) : (
+    <s-button
+      slot="primary-action"
+      href={loaderData.themeEditorUrl}
+      target="_blank"
+      variant="primary"
+    >
+      Turn on the recorder
+    </s-button>
+  );
 
-      <s-section heading="Storefront analytics">
+  return (
+    <s-page heading={live ? "You’re live" : "Welcome to PathMinty"}>
+      {primary}
+
+      <s-section
+        heading={live ? "Nice — data is flowing" : "Two minutes to first session"}
+      >
         <s-stack direction="block" gap="base">
           <s-paragraph>
-            See how shoppers move through your store — page flow, click heatmaps, and
-            session recordings. Capture waits for analytics consent and never records
-            form values or keystrokes.
+            {live
+              ? "Heatmaps, journeys, and recordings are ready. Open the dashboard anytime."
+              : "We’ll connect the store for you. You just flip one switch in the theme, click around the storefront, and you’re in."}
           </s-paragraph>
           <s-stack direction="inline" gap="base">
-            <s-badge tone={connected ? "success" : "caution"}>
-              {connected
-                ? "Connected"
-                : loaderData.optedOut
-                  ? "Disconnected"
-                  : isBusy
-                    ? "Connecting"
-                    : "Setup required"}
+            <s-badge tone={connected ? "success" : "info"}>
+              {connected ? "Store connected" : isBusy ? "Connecting…" : "Not connected"}
+            </s-badge>
+            <s-badge tone={live ? "success" : "caution"}>
+              {live ? "Sessions arriving" : "Waiting for first session"}
             </s-badge>
             <s-text tone="neutral">{loaderData.shop}</s-text>
           </s-stack>
+        </s-stack>
+      </s-section>
+
+      <s-section heading="Do this once">
+        <s-unordered-list>
+          <s-list-item>
+            {connected
+              ? "1. Store connected. You can skip this."
+              : "1. Wait a moment — PathMinty is connecting your store."}
+          </s-list-item>
+          <s-list-item>
+            2. Theme editor → App embeds → turn on <strong>PathMinty Recorder</strong> →
+            Save.
+          </s-list-item>
+          <s-list-item>
+            3. Visit your store. Accept analytics cookies if asked. Click a couple of
+            pages.
+          </s-list-item>
+          <s-list-item>
+            4. Come back here and open the dashboard. About 15 seconds.
+          </s-list-item>
+        </s-unordered-list>
+        <s-stack direction="inline" gap="base">
+          <s-button
+            href={loaderData.themeEditorUrl}
+            target="_blank"
+            disabled={!connected}
+            variant={live ? "secondary" : "primary"}
+          >
+            Open theme editor
+          </s-button>
+          <s-button href={storefrontUrl} target="_blank" disabled={!connected}>
+            Open store
+          </s-button>
+          <s-button
+            onClick={openDashboard}
+            disabled={!connected || isOpeningDashboard}
+            {...(isOpeningDashboard ? { loading: true } : {})}
+          >
+            Open dashboard
+          </s-button>
         </s-stack>
       </s-section>
 
@@ -525,9 +578,7 @@ export default function Setup() {
             <strong>
               {usage.billableSessions.toLocaleString()} / {usage.limit.toLocaleString()}
             </strong>{" "}
-            human sessions on <strong>{loaderData.planName}</strong>.{" "}
-            {usage.botSessions} bots filtered ·{" "}
-            {PLAN_CATALOG[loaderData.planId].retentionDays}-day retain.
+            human sessions on <strong>{loaderData.planName}</strong>. Bots don’t count.
           </s-paragraph>
           <s-banner
             tone={
@@ -544,79 +595,30 @@ export default function Setup() {
         </s-stack>
       </s-section>
 
-      <s-section heading="1. Connect customer events">
-        <s-paragraph>
-          Installs PathMinty’s Web Pixel for page, product, cart, and checkout signals.
-          No theme files are edited.
-        </s-paragraph>
-        <s-button onClick={connect} {...(isBusy ? { loading: true } : {})}>
-          {connected ? "Reconnect" : "Connect"}
-        </s-button>
-      </s-section>
-
-      <s-section heading="2. Enable the recorder embed">
-        <s-paragraph>
-          In the theme editor, turn on the PathMinty Recorder app embed and save. This
-          is required once per theme.
-        </s-paragraph>
-        <s-button
-          href={loaderData.themeEditorUrl}
-          target="_blank"
-          disabled={!connected}
-        >
-          Open theme editor
-        </s-button>
-      </s-section>
-
-      <s-section heading="3. Open the dashboard">
-        <s-paragraph>
-          Browse your storefront with analytics consent accepted, then open the
-          dashboard. Sessions and the site canvas update within about 15 seconds.
-        </s-paragraph>
-        <s-button
-          onClick={openDashboard}
-          disabled={!connected || isOpeningDashboard}
-          {...(isOpeningDashboard ? { loading: true } : {})}
-        >
-          Open dashboard
-        </s-button>
-      </s-section>
-
-      <s-section slot="aside" heading="Privacy defaults">
+      <s-section slot="aside" heading="You’re safe">
         <s-unordered-list>
-          <s-list-item>
-            Form fields and keystrokes are never captured in session recordings.
-          </s-list-item>
-          <s-list-item>Obvious contact details in search terms are masked.</s-list-item>
-          <s-list-item>Storefront URLs drop query strings and fragments.</s-list-item>
-          <s-list-item>
-            Recording waits for analytics consent when required.
-          </s-list-item>
+          <s-list-item>Passwords and form values are never recorded.</s-list-item>
+          <s-list-item>Checkout pages skip the recording camera.</s-list-item>
+          <s-list-item>We wait for analytics consent.</s-list-item>
+          <s-list-item>Ad blockers can hide a visit. That’s normal.</s-list-item>
         </s-unordered-list>
       </s-section>
 
       {connected && (
-        <s-section slot="aside" heading="Tracking control">
+        <s-section slot="aside" heading="Need to pause?">
           <s-paragraph>
-            Disconnecting removes the Web Pixel and recorder configuration. Turn off the
-            app embed in your theme as well if it is still enabled.
+            This stops new capture. Old sessions follow your plan.
           </s-paragraph>
           <s-button
             tone="critical"
             commandFor="disconnect-tracking-modal"
             command="--show"
           >
-            Disconnect tracking
+            Disconnect
           </s-button>
-          <s-modal id="disconnect-tracking-modal" heading="Disconnect tracking?">
+          <s-modal id="disconnect-tracking-modal" heading="Disconnect PathMinty?">
             <s-stack direction="block" gap="base">
-              <s-text>
-                New customer-event and interaction data will stop flowing to PathMinty.
-              </s-text>
-              <s-banner tone="warning">
-                Previously collected data follows your retention settings and Shopify
-                privacy requests.
-              </s-banner>
+              <s-text>New visits will stop appearing in the dashboard.</s-text>
             </s-stack>
             <s-button
               slot="primary-action"
@@ -627,14 +629,14 @@ export default function Setup() {
               command="--hide"
               {...(isBusy ? { loading: true } : {})}
             >
-              Disconnect tracking
+              Disconnect
             </s-button>
             <s-button
               slot="secondary-actions"
               commandFor="disconnect-tracking-modal"
               command="--hide"
             >
-              Cancel
+              Keep capturing
             </s-button>
           </s-modal>
         </s-section>

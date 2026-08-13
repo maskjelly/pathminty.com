@@ -93,21 +93,16 @@ function EmptySessions({ onRefresh }: { onRefresh: () => void }) {
       <span className="live-empty-icon">
         <CursorClick size={22} />
       </span>
-      <p>No traffic in this range</p>
-      <h2>Waiting for storefront sessions</h2>
+      <p>You’re almost there</p>
+      <h2>Let’s get your first session</h2>
       <ol className="live-empty-steps">
         <li>
-          In Shopify Admin, open{" "}
-          <strong>Online Store → Themes → Customize → App embeds</strong> and enable{" "}
-          <strong>PathMinty Recorder</strong>, then save.
+          In Shopify: <strong>Online Store → Themes → Customize → App embeds</strong>.
+          Turn on <strong>PathMinty Recorder</strong> and save.
         </li>
+        <li>Open your store. Accept analytics cookies if asked.</li>
         <li>
-          Visit the storefront and accept analytics cookies if your store requires
-          consent.
-        </li>
-        <li>
-          Browse a few pages (home, collection, product). Sessions appear here within
-          about 15 seconds.
+          Click around (home, a collection, a product). We’ll show it here in ~15s.
         </li>
       </ol>
       <p className="live-empty-note">

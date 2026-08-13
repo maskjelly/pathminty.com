@@ -21,7 +21,7 @@ export function SettingsPage({
         </button>
         <div>
           <p>Workspace</p>
-          <h2>Plan, team, privacy</h2>
+          <h2>Plan & privacy</h2>
         </div>
       </header>
 
@@ -81,26 +81,6 @@ export function SettingsPage({
         Paid plans are confirmed in Shopify Admin → PathMinty → Plan so the charge
         matches what you see here. Development stores can switch instantly.
       </p>
-
-      <article className="settings-card">
-        <h3>Team roles</h3>
-        <p>
-          Anyone who opens PathMinty from Shopify Admin is treated as{" "}
-          <strong>{workspace.role}</strong> for this shop. Growth unlocks owner /
-          analyst / viewer defaults.
-        </p>
-        <ul className="role-list">
-          <li>
-            <strong>Owner</strong> — plan, filters, recordings
-          </li>
-          <li>
-            <strong>Analyst</strong> — everything except billing
-          </li>
-          <li>
-            <strong>Viewer</strong> — heatmaps and recordings, no plan changes
-          </li>
-        </ul>
-      </article>
 
       <article className="settings-card">
         <h3>Privacy defaults</h3>

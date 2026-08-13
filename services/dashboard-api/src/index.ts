@@ -12,7 +12,6 @@ import { R2ReplayObjectStore } from "@pathminty/cloudflare";
 import {
   BillingSelectRequestSchema,
   HeatmapModeSchema,
-  MerchantRoleSchema,
   PlanIdSchema,
   RouteSortSchema,
   SessionQualitySchema,
@@ -274,37 +273,6 @@ app.post("/v1/shops/:shopId/billing", async (context) => {
   return context.json(
     await buildWorkspace(context.env.SHOPIFY_INSTALLATIONS, shop.data, "owner"),
   );
-});
-
-app.post("/v1/shops/:shopId/members", async (context) => {
-  const shop = ShopIdSchema.safeParse(context.req.param("shopId"));
-  if (!shop.success) return context.json({ error: "Invalid shop" }, 400);
-  if (shop.data !== context.get("authorizedShopId")) {
-    return context.json({ error: "Shop access denied" }, 403);
-  }
-  const workspace = await buildWorkspace(
-    context.env.SHOPIFY_INSTALLATIONS,
-    shop.data,
-    "owner",
-  );
-  if (workspace.plan.id !== "growth") {
-    return context.json({ error: "Team roles are on the Growth plan." }, 402);
-  }
-  let body: unknown;
-  try {
-    body = await context.req.json<unknown>();
-  } catch {
-    return context.json({ error: "Invalid request" }, 400);
-  }
-  const record =
-    typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
-  const role = MerchantRoleSchema.safeParse(record.role);
-  if (!role.success) return context.json({ error: "Invalid role" }, 400);
-  return context.json({
-    ok: true,
-    role: role.data,
-    note: "Anyone who opens PathMinty from Shopify Admin inherits this default role.",
-  });
 });
 
 app.get("/v1/shops/:shopId/sessions", async (context) => {

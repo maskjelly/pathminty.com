@@ -25,8 +25,15 @@ export default function App() {
           billed on human sessions, not bots.
         </p>
         <p className={styles.notice}>
-          PathMinty installs only from Shopify Admin. Store domains are never entered
-          here.
+          PathMinty installs only from Shopify. We never ask you to type a store domain.
+        </p>
+        <p>
+          <a
+            className={styles.install}
+            href="https://admin.shopify.com/oauth/install?client_id=62b97c0201c60add657038e08ce9ba95"
+          >
+            Add to Shopify — free
+          </a>
         </p>
         <ul className={styles.list}>
           <li>
