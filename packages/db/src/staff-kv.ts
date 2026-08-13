@@ -47,12 +47,13 @@ export async function upsertStaffInKv(
     role: StaffRole;
     password: string;
     active?: boolean;
+    id?: string;
   },
 ): Promise<StaffUser> {
   const email = input.email.toLowerCase();
   const existing = (await store.get(userKey(email), "json")) as StoredStaff | null;
   const user: StoredStaff = {
-    id: existing?.id ?? crypto.randomUUID(),
+    id: input.id ?? existing?.id ?? crypto.randomUUID(),
     email,
     name: input.name,
     role: input.role,
@@ -144,12 +145,13 @@ export async function ensureBootstrapStaff(
   password: string | undefined,
 ): Promise<void> {
   if (!email || !password) return;
-  const existing = await store.get(userKey(email), "json");
-  if (existing) return;
+  const existing = (await store.get(userKey(email), "json")) as StoredStaff | null;
+  // Env secret is the source of truth for the founder login.
   await upsertStaffInKv(store, {
     email,
-    name: "Founder",
+    name: existing?.name || "Founder",
     role: "admin",
     password,
+    ...(existing?.id ? { id: existing.id } : {}),
   });
 }

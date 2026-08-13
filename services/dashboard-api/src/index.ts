@@ -655,36 +655,43 @@ app.get("/v1/shops/:shopId/journeys", async (context) => {
 });
 
 app.post("/v1/ops/login", async (context) => {
-  const store = context.env.SHOPIFY_INSTALLATIONS;
-  await bootstrapOps(
-    store,
-    context.env as {
-      OPS_BOOTSTRAP_EMAIL?: string;
-      OPS_BOOTSTRAP_PASSWORD?: string;
-    },
-  );
-  let body: unknown;
   try {
-    body = await context.req.json<unknown>();
-  } catch {
-    return context.json({ error: "Invalid request" }, 400);
+    const store = context.env.SHOPIFY_INSTALLATIONS;
+    await bootstrapOps(
+      store,
+      context.env as {
+        OPS_BOOTSTRAP_EMAIL?: string;
+        OPS_BOOTSTRAP_PASSWORD?: string;
+      },
+    );
+    let body: unknown;
+    try {
+      body = await context.req.json<unknown>();
+    } catch {
+      return context.json({ error: "Invalid request" }, 400);
+    }
+    const record =
+      typeof body === "object" && body !== null
+        ? (body as Record<string, unknown>)
+        : {};
+    if (typeof record.email !== "string" || typeof record.password !== "string") {
+      return context.json({ error: "Email and password are required" }, 400);
+    }
+    const staff = await loginStaff(store, record.email, record.password);
+    if (!staff) return context.json({ error: "Invalid staff credentials" }, 401);
+    const sessionId = await issueStaffCookie(store, staff);
+    setCookie(context, "pathminty_ops", sessionId, {
+      httpOnly: true,
+      maxAge: 43_200,
+      path: "/",
+      sameSite: "Lax",
+      secure: new URL(context.req.url).protocol === "https:",
+    });
+    return context.json({ staff });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Staff sign-in failed.";
+    return context.json({ error: message }, 500);
   }
-  const record =
-    typeof body === "object" && body !== null ? (body as Record<string, unknown>) : {};
-  if (typeof record.email !== "string" || typeof record.password !== "string") {
-    return context.json({ error: "Email and password are required" }, 400);
-  }
-  const staff = await loginStaff(store, record.email, record.password);
-  if (!staff) return context.json({ error: "Invalid staff credentials" }, 401);
-  const sessionId = await issueStaffCookie(store, staff);
-  setCookie(context, "pathminty_ops", sessionId, {
-    httpOnly: true,
-    maxAge: 43_200,
-    path: "/",
-    sameSite: "Lax",
-    secure: new URL(context.req.url).protocol === "https:",
-  });
-  return context.json({ staff });
 });
 
 app.post("/v1/ops/logout", async (context) => {

@@ -301,10 +301,16 @@ export async function opsLogin(email: string, password: string): Promise<StaffUs
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
-  if (!response.ok) throw new Error("Staff sign-in failed.");
-  const staff = StaffUserSchema.safeParse(
-    readNamedField(await response.json(), "staff"),
-  );
+  const body: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    const detail = readNamedField(body, "error");
+    throw new Error(
+      typeof detail === "string" && detail.length > 0
+        ? detail
+        : "Staff sign-in failed.",
+    );
+  }
+  const staff = StaffUserSchema.safeParse(readNamedField(body, "staff"));
   if (!staff.success) throw new Error("Staff sign-in failed.");
   return staff.data;
 }

@@ -1,4 +1,7 @@
 const textEncoder = new TextEncoder();
+/** Workers-safe. Legacy hashes used 120000 and a two-part `salt$hash`. */
+export const PASSWORD_ITERATIONS = 10_000;
+const LEGACY_ITERATIONS = 120_000;
 
 function toHex(bytes: Uint8Array): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
@@ -12,14 +15,14 @@ function fromHex(value: string): Uint8Array {
   return bytes;
 }
 
-export async function hashPassword(
-  password: string,
-  saltHex?: string,
-): Promise<string> {
-  const salt =
-    saltHex !== undefined
-      ? fromHex(saltHex)
-      : crypto.getRandomValues(new Uint8Array(16));
+function saltBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  ) as ArrayBuffer;
+}
+
+async function derive(password: string, salt: Uint8Array, iterations: number) {
   const key = await crypto.subtle.importKey(
     "raw",
     textEncoder.encode(password),
@@ -31,21 +34,47 @@ export async function hashPassword(
     {
       name: "PBKDF2",
       hash: "SHA-256",
-      salt: salt as BufferSource,
-      iterations: 120_000,
+      salt: saltBuffer(salt),
+      iterations,
     },
     key,
     256,
   );
-  return `${toHex(salt)}$${toHex(new Uint8Array(bits))}`;
+  return toHex(new Uint8Array(bits));
+}
+
+export async function hashPassword(
+  password: string,
+  saltHex?: string,
+  iterations: number = PASSWORD_ITERATIONS,
+): Promise<string> {
+  const salt =
+    saltHex !== undefined
+      ? fromHex(saltHex)
+      : crypto.getRandomValues(new Uint8Array(16));
+  const digest = await derive(password, salt, iterations);
+  return `${toHex(salt)}$${iterations}$${digest}`;
 }
 
 export async function verifyPassword(
   password: string,
   stored: string,
 ): Promise<boolean> {
-  const [salt, expected] = stored.split("$");
-  if (!salt || !expected) return false;
-  const next = await hashPassword(password, salt);
-  return next === stored;
+  const parts = stored.split("$");
+  if (parts.length === 3) {
+    const [salt, iterRaw, expected] = parts;
+    const iterations = Number(iterRaw);
+    if (!salt || !expected || !Number.isInteger(iterations) || iterations < 1) {
+      return false;
+    }
+    const digest = await derive(password, fromHex(salt), iterations);
+    return digest === expected;
+  }
+  if (parts.length === 2) {
+    const [salt, expected] = parts;
+    if (!salt || !expected) return false;
+    const digest = await derive(password, fromHex(salt), LEGACY_ITERATIONS);
+    return digest === expected;
+  }
+  return false;
 }
