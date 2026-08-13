@@ -43,6 +43,7 @@ export interface ReplayObjectStore {
     shopId: string,
     checkoutToken: string,
   ): Promise<CheckoutIndex | null>;
+  deleteShopObjects(shopId: string): Promise<number>;
 }
 
 export interface SessionJobPublisher {
@@ -99,4 +100,14 @@ export function orderFactKey(shopId: string, shopifyOrderId: string): string {
 
 export function checkoutIndexKey(shopId: string, checkoutToken: string): string {
   return `checkout-index/v1/${shopId}/${encodeURIComponent(checkoutToken)}.json`;
+}
+
+export function shopObjectPrefixes(shopId: string): readonly string[] {
+  return [
+    `replays/v1/${shopId}/`,
+    sessionSummaryPrefix(shopId),
+    `shopify-events/v1/${shopId}/`,
+    orderFactPrefix(shopId),
+    `checkout-index/v1/${shopId}/`,
+  ];
 }

@@ -1702,6 +1702,25 @@ body {
   margin-top: 12px;
 }
 
+.legal-body {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 40px 24px 64px;
+}
+.legal-body h2 {
+  margin: 28px 0 8px;
+  font-size: 18px;
+}
+.legal-body p,
+.legal-body li {
+  color: var(--text-secondary);
+  line-height: 1.55;
+  font-size: 15px;
+}
+.legal-body a {
+  color: var(--green);
+}
+
 @media (max-width: 720px) {
   .marketing-nav nav a:not(.marketing-cta) {
     display: none;

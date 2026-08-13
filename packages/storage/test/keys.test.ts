@@ -7,6 +7,7 @@ import {
   replayManifestKey,
   sessionSummaryKey,
   shopifyEventKey,
+  shopObjectPrefixes,
 } from "../src/index";
 
 describe("replay object keys", () => {
@@ -98,5 +99,14 @@ describe("replay object keys", () => {
     ).toBe(
       "checkout-index/v1/pathminty-demo-store.myshopify.com/tok%2Fwith%2Fslash.json",
     );
+  });
+
+  it("lists every shop-scoped prefix for deletion", () => {
+    const prefixes = shopObjectPrefixes("pathminty-demo-store.myshopify.com");
+    expect(prefixes).toContain("replays/v1/pathminty-demo-store.myshopify.com/");
+    expect(prefixes).toContain(
+      "session-summaries/v1/pathminty-demo-store.myshopify.com/",
+    );
+    expect(prefixes.every((prefix) => prefix.endsWith("/"))).toBe(true);
   });
 });

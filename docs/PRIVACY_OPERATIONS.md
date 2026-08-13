@@ -24,8 +24,9 @@ legal review.
 - `shop/redact`: delete installation KV immediately and enqueue deletion of all R2 and
   Postgres objects for that shop within Shopify's required period.
 
-The current code deletes installation KV for `shop/redact`; the R2/Postgres deletion
-consumer is a release blocker.
+Uninstall and `shop/redact` delete installation KV immediately and enqueue a
+`SHOP_REDACT` job. The analytics worker deletes that shop’s R2 prefixes (replays,
+summaries, pixel events, order facts, checkout index) and usage/subscription KV keys.
 
 ## Session-recording invariants
 

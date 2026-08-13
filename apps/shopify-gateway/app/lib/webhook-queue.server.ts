@@ -38,3 +38,15 @@ export async function queueShopifyWebhook(input: {
     payload: input.payload,
   });
 }
+
+/** Queue R2 + usage wipe. Safe to call after uninstall or shop/redact. */
+export async function enqueueShopWipe(shop: string, reason: string) {
+  await env.SHOPIFY_WEBHOOKS.send({
+    schemaVersion: 1,
+    webhookId: `wipe-${reason}-${Date.now()}`,
+    shop,
+    topic: "SHOP_REDACT",
+    receivedAt: new Date().toISOString(),
+    payload: { reason },
+  });
+}

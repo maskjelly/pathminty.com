@@ -257,9 +257,28 @@ async function upsertOrderAndJoin(
   return next;
 }
 
+async function wipeShopKv(store: KVNamespace, shopId: string) {
+  await Promise.all([
+    store.delete(`shop:${shopId}`),
+    store.delete(`subscription:${shopId}`),
+    store.delete(`health:${shopId}`),
+  ]);
+  for (const prefix of [`usage:${shopId}:`, `counted:${shopId}:`]) {
+    let cursor: string | undefined;
+    do {
+      const page = await store.list(
+        cursor === undefined ? { prefix } : { prefix, cursor },
+      );
+      await Promise.all(page.keys.map((key) => store.delete(key.name)));
+      cursor = page.list_complete ? undefined : page.cursor;
+    } while (cursor !== undefined);
+  }
+}
+
 async function processShopifyWebhook(
   message: Message<ShopifyWebhookJob>,
   objectStore: R2ReplayObjectStore,
+  env: AnalyticsEnv,
 ) {
   const result = ShopifyWebhookJobSchema.safeParse(message.body);
   if (!result.success) {
@@ -360,7 +379,19 @@ async function processShopifyWebhook(
       return;
     }
 
-    // Compliance topics: acknowledge only for now (retention jobs land later).
+    if (job.topic === "SHOP_REDACT") {
+      const deleted = await objectStore.deleteShopObjects(job.shop);
+      await wipeShopKv(env.SHOPIFY_INSTALLATIONS, job.shop);
+      log("info", "shop_data_wiped", {
+        messageId: message.id,
+        shopId: job.shop,
+        webhookId: job.webhookId,
+        deletedObjects: deleted,
+      });
+      message.ack();
+      return;
+    }
+
     log("info", "shopify_webhook_ack_only", {
       messageId: message.id,
       shopId: job.shop,
@@ -391,7 +422,11 @@ export default {
 
     if (isShopifyWebhooksQueue(batch.queue)) {
       for (const message of batch.messages) {
-        await processShopifyWebhook(message as Message<ShopifyWebhookJob>, objectStore);
+        await processShopifyWebhook(
+          message as Message<ShopifyWebhookJob>,
+          objectStore,
+          env,
+        );
       }
       return;
     }

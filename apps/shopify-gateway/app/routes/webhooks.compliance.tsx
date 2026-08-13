@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import type { ActionFunctionArgs } from "react-router";
 
+import { enqueueShopWipe } from "../lib/webhook-queue.server";
 import { authenticate } from "../shopify.server";
 
 export const action = async ({ request }: ActionFunctionArgs) => {
@@ -8,6 +9,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (String(topic).toUpperCase() === "SHOP_REDACT") {
     await env.SHOPIFY_INSTALLATIONS.delete(`shop:${shop}`);
+    await enqueueShopWipe(shop, "shop_redact");
   }
 
   // PathMinty does not collect customer names, email addresses, phone numbers,

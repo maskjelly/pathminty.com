@@ -1,6 +1,6 @@
 # Shopify App Store listing draft
 
-Status: copy draft only. Legal, pricing, support, and media fields are incomplete.
+Live development listing (workers.dev). Replace host after the custom domain exists.
 
 ## Name
 
@@ -19,7 +19,7 @@ cart and checkout.
 
 Use PathMinty to:
 
-- compare click and hover patterns across desktop and mobile;
+- compare click, hover, and scroll patterns across desktop and mobile;
 - explore a live site canvas of the pages shoppers visit;
 - open route heatmaps over real page previews;
 - replay privacy-masked session recordings;
@@ -33,12 +33,18 @@ Use PathMinty to:
 - Insights need enough traffic to be meaningful; they are not sales guarantees.
 - Verified order-revenue join is planned after protected-customer-data approval.
 
-## Required before publishing
+## Pricing
 
-- Pricing: **Free** (1,000 human sessions), **Launch $19** (10,000), **Growth $49**
-  (50,000). Confirm charges through Shopify Billing. Bots do not consume quota.
-- Support email: `[required]`
-- Privacy policy URL: `[required]`
-- Terms URL: `[required]`
-- Support URL: `[required]`
-- App Store screenshots and narrated review video: `[required]`
+- **Free** — 1,000 human sessions / month, 14-day replay storage
+- **Launch — $19 / month** — 10,000 sessions, 30-day storage
+- **Growth — $49 / month** — 50,000 sessions, 60-day storage, team roles
+
+Bots and 1-second pogo-stabs do not consume quota. Recording pauses at the cap.
+
+## Listing URLs (live)
+
+- Support email: jurius.law@gmail.com
+- Privacy: https://pathminty-dashboard-dev.pathminty-collector.workers.dev/privacy
+- Terms: https://pathminty-dashboard-dev.pathminty-collector.workers.dev/terms
+- Support: https://pathminty-dashboard-dev.pathminty-collector.workers.dev/support
+- App: https://pathminty-shopify-gateway-dev.pathminty-collector.workers.dev/

@@ -35,6 +35,7 @@ import {
   sessionSummaryKey,
   sessionSummaryPrefix,
   shopifyEventKey,
+  shopObjectPrefixes,
   type ReplayManifest,
   type ReplayObjectStore,
   type SessionJobPublisher,
@@ -234,6 +235,26 @@ export class R2ReplayObjectStore implements ReplayObjectStore {
     const parsed = CheckoutIndexSchema.safeParse(await object.json<unknown>());
     if (!parsed.success) throw new Error("Stored checkout index is invalid");
     return parsed.data;
+  }
+
+  async deleteShopObjects(shopId: string): Promise<number> {
+    let deleted = 0;
+    for (const prefix of shopObjectPrefixes(shopId)) {
+      let cursor: string | undefined;
+      do {
+        const page = await this.bucket.list(
+          cursor === undefined ? { prefix } : { prefix, cursor },
+        );
+        if (page.objects.length > 0) {
+          await Promise.all(
+            page.objects.map((object) => this.bucket.delete(object.key)),
+          );
+          deleted += page.objects.length;
+        }
+        cursor = page.truncated ? page.cursor : undefined;
+      } while (cursor !== undefined);
+    }
+    return deleted;
   }
 }
 

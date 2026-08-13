@@ -29,6 +29,7 @@ export function Landing() {
         <nav>
           <a href="#why">Why</a>
           <a href="#pricing">Pricing</a>
+          <a href="/support">Support</a>
           <a className="marketing-cta" href={SHOPIFY_INSTALL_URL}>
             Add to Shopify
           </a>
@@ -148,7 +149,10 @@ export function Landing() {
 
       <footer className="marketing-footer">
         <p>PathMinty · Shopify behavior intelligence</p>
-        <a href="/ops">Staff</a>
+        <span>
+          <a href="/privacy">Privacy</a> · <a href="/terms">Terms</a> ·{" "}
+          <a href="/support">Support</a> · <a href="/ops">Staff</a>
+        </span>
       </footer>
     </div>
   );
