@@ -1483,27 +1483,69 @@ export function extractSnapshotEvents(
   return slice.length >= 2 ? slice : null;
 }
 
-function quantize(value: number, bins = 80): number {
+/** Page is a density grid. Never one output point per visitor. */
+export const HEATMAP_GRID_BINS = 48;
+export const HEATMAP_MAX_CELLS = 256;
+
+function quantize(value: number, bins = HEATMAP_GRID_BINS): number {
   return Math.round(clamp01(value) * bins) / bins;
 }
 
+/**
+ * Fold raw clicks/hovers into a bounded weight grid.
+ * 10M visits on the same button stay one hot cell, not 10M dots.
+ */
 export function aggregateHeatmapPoints(
   items: readonly { x: number; y: number; weight?: number }[],
+  options?: { bins?: number; maxCells?: number },
 ): HeatmapPoint[] {
+  const bins = options?.bins ?? HEATMAP_GRID_BINS;
+  const maxCells = options?.maxCells ?? HEATMAP_MAX_CELLS;
   const buckets = new Map<string, HeatmapPoint>();
   for (const item of items) {
-    const x = quantize(item.x);
-    const y = quantize(item.y);
+    const x = quantize(item.x, bins);
+    const y = quantize(item.y, bins);
     const key = `${x}:${y}`;
+    const weight = Math.max(0, item.weight ?? 1);
+    if (weight <= 0) continue;
     const existing = buckets.get(key);
-    const weight = item.weight ?? 1;
     if (existing) {
-      buckets.set(key, { x, y, weight: existing.weight + weight });
+      existing.weight += weight;
     } else {
       buckets.set(key, { x, y, weight });
     }
   }
-  return [...buckets.values()].sort((left, right) => right.weight - left.weight);
+
+  const ranked = [...buckets.values()].sort(
+    (left, right) => right.weight - left.weight,
+  );
+  if (ranked.length === 0) return ranked;
+
+  const peak = ranked[0]?.weight ?? 0;
+  const total = ranked.reduce((sum, point) => sum + point.weight, 0);
+  const floor = total >= 200 ? Math.max(2, peak * 0.02) : 0;
+  const meaningful =
+    floor > 0 ? ranked.filter((point) => point.weight >= floor) : ranked;
+  const source = meaningful.length > 0 ? meaningful : ranked.slice(0, 1);
+  if (source.length <= maxCells) return source;
+
+  const kept = source.slice(0, maxCells);
+  for (const extra of source.slice(maxCells)) {
+    let nearest = kept[0];
+    let best = Number.POSITIVE_INFINITY;
+    for (const cell of kept) {
+      if (!cell) continue;
+      const dx = cell.x - extra.x;
+      const dy = cell.y - extra.y;
+      const distance = dx * dx + dy * dy;
+      if (distance < best) {
+        best = distance;
+        nearest = cell;
+      }
+    }
+    if (nearest) nearest.weight += extra.weight;
+  }
+  return kept.sort((left, right) => right.weight - left.weight);
 }
 
 export function buildHeatmap(input: {

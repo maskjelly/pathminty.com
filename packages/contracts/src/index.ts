@@ -392,7 +392,7 @@ export const HeatmapPointSchema = z
   .object({
     x: NormalizedCoordinateSchema,
     y: NormalizedCoordinateSchema,
-    weight: z.number().positive().max(1_000_000),
+    weight: z.number().positive().max(1_000_000_000_000),
   })
   .strict();
 

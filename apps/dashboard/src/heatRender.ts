@@ -149,5 +149,5 @@ export function heatBlendMode(mode: HeatmapMode): string {
 export function heatLegend(mode: HeatmapMode): { from: string; to: string } {
   if (mode === "hover") return { from: "Glance", to: "Dwell" };
   if (mode === "scroll") return { from: "Nobody", to: "Everyone saw" };
-  return { from: "Fewer", to: "More clicks" };
+  return { from: "Quiet area", to: "Heavy clicks" };
 }

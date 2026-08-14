@@ -1,12 +1,24 @@
 import { describe, expect, it } from "vitest";
 
-import { clickShouldBloom } from "./exactHeat";
+import { clickShouldBloom, pickClickHotspots } from "./exactHeat";
 import { drawHeatForMode, heatLegend } from "./heatRender";
 
 describe("heatRender", () => {
   it("labels each mode distinctly", () => {
     expect(heatLegend("hover").to).toBe("Dwell");
     expect(heatLegend("click").to).toMatch(/clicks/i);
+  });
+
+  it("only marks a handful of heavy click cells", () => {
+    const hotspots = pickClickHotspots([
+      { x: 0.2, y: 0.2, weight: 1 },
+      { x: 0.3, y: 0.3, weight: 2 },
+      { x: 0.5, y: 0.4, weight: 40 },
+      { x: 0.51, y: 0.41, weight: 18 },
+      { x: 0.8, y: 0.8, weight: 1 },
+    ]);
+    expect(hotspots.length).toBeLessThanOrEqual(6);
+    expect(hotspots.every((point) => point.weight >= 4)).toBe(true);
   });
 
   it("blooms clicks only when a spot has volume", () => {

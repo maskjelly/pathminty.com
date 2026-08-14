@@ -3,6 +3,7 @@ import { SESSION_IDLE_TIMEOUT_MS } from "@pathminty/contracts";
 import { describe, expect, it } from "vitest";
 
 import {
+  aggregateHeatmapPoints,
   assessReplayReconstruction,
   attachOrderToSession,
   buildActivityTimeline,
@@ -705,6 +706,32 @@ describe("buildHeatmap", () => {
     });
     expect(heatmap.sessionCount).toBe(1);
     expect(heatmap.points.length).toBeGreaterThan(0);
+  });
+});
+
+describe("aggregateHeatmapPoints", () => {
+  it("folds many clicks in the same area into one weighted cell", () => {
+    const items = Array.from({ length: 10_000 }, () => ({
+      x: 0.41,
+      y: 0.62,
+      weight: 1,
+    }));
+    const points = aggregateHeatmapPoints(items);
+    expect(points.length).toBe(1);
+    expect(points[0]?.weight).toBe(10_000);
+  });
+
+  it("never emits one point per visitor when clicks are spread out", () => {
+    const items = Array.from({ length: 10_000 }, (_, index) => ({
+      x: (index % 100) / 100,
+      y: Math.floor(index / 100) / 100,
+      weight: 1,
+    }));
+    const points = aggregateHeatmapPoints(items);
+    expect(points.length).toBeLessThanOrEqual(256);
+    expect(points.length).toBeGreaterThan(0);
+    const total = points.reduce((sum, point) => sum + point.weight, 0);
+    expect(total).toBeGreaterThan(0);
   });
 });
 
