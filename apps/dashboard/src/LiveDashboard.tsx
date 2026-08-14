@@ -1,6 +1,7 @@
 import {
   ArrowClockwise,
   ArrowLeft,
+  ChartLine,
   CursorClick,
   DeviceMobile,
   GearSix,
@@ -48,13 +49,15 @@ import { CanvasToolbar } from "./components/CanvasToolbar";
 import { HeatmapSurface } from "./components/HeatmapSurface";
 import { ReplayViewer } from "./components/ReplayViewer";
 import { SiteCanvas, type SiteCanvasHandle } from "./components/SiteCanvas";
+import { InsightsPage } from "./insights/InsightsPage";
 import { displayRouteLabel, isHomeRoute, pinHomePath } from "./siteCanvasLayout";
 
-type View = "Heatmaps" | "Recordings" | "Settings";
+type View = "Heatmaps" | "Insights" | "Recordings" | "Settings";
 type HeatmapPane = "map" | "route";
 
 const views: Array<{ label: View; icon: typeof MapTrifold }> = [
   { label: "Heatmaps", icon: MapTrifold },
+  { label: "Insights", icon: ChartLine },
   { label: "Recordings", icon: Record },
   { label: "Settings", icon: GearSix },
 ];
@@ -424,7 +427,7 @@ export function LiveDashboard() {
 
   // Initial + filter-driven loads for heatmaps site map (no auto-poll).
   useEffect(() => {
-    if (!shopId || view !== "Heatmaps") return;
+    if (!shopId || (view !== "Heatmaps" && view !== "Insights")) return;
     void loadSiteMap(shopId);
   }, [shopId, view, loadSiteMap]);
 
@@ -708,6 +711,19 @@ export function LiveDashboard() {
                     ? "Capture hit errors in the last hour. Check the recorder embed and ad blockers."
                     : "Tracking is disconnected. Reconnect from Shopify Admin."}
           </div>
+        ) : null}
+
+        {view === "Insights" ? (
+          <InsightsPage
+            journey={journey}
+            onOpenHeatmap={(route) => {
+              setView("Heatmaps");
+              if (route) setSelectedRoute(route);
+              else setSelectedRoute(null);
+            }}
+            onOpenRecordings={() => setView("Recordings")}
+            routes={routeIndex?.routes ?? []}
+          />
         ) : null}
 
         {view === "Settings" && workspace ? (
