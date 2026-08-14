@@ -14,6 +14,9 @@ export type FunnelStep = {
   dropOffCount: number | null;
 };
 
+/** Below this, a 100% leak is noise — not a finding. */
+export const MIN_FUNNEL_SESSIONS = 10;
+
 export type InsightRec = {
   title: string;
   body: string;
@@ -71,6 +74,18 @@ export function buildFunnelSteps(
 
   const steps = STEP_META.map((meta, index) => {
     const sessions = byStep.get(meta.id) ?? 0;
+    // Empty stages are skips or "not reached" — never a conversion event.
+    // Drop-off is computed on the drawn path (see drawnFunnelSteps).
+    if (sessions <= 0) {
+      return {
+        id: meta.id,
+        label: meta.label,
+        sessions: 0,
+        fromPrevious: null,
+        dropOff: null,
+        dropOffCount: null,
+      };
+    }
     let previous: number | null = null;
     for (let look = index - 1; look >= 0; look -= 1) {
       const count = byStep.get(STEP_META[look]?.id ?? "home") ?? 0;
@@ -122,6 +137,34 @@ export function buildFunnelSteps(
   return steps;
 }
 
+/** Stages that actually have traffic, with conversion vs the previous drawn stage. */
+export function drawnFunnelSteps(steps: readonly FunnelStep[]): FunnelStep[] {
+  const visible = steps.filter((step) => step.sessions > 0);
+  return visible.map((step, index) => {
+    if (index === 0) {
+      return { ...step, fromPrevious: 1, dropOff: 0, dropOffCount: 0 };
+    }
+    const previous = visible[index - 1]?.sessions ?? 0;
+    const fromPrevious = previous > 0 ? Math.min(1, step.sessions / previous) : null;
+    return {
+      ...step,
+      fromPrevious,
+      dropOff: fromPrevious === null ? null : Math.max(0, 1 - fromPrevious),
+      dropOffCount: previous > 0 ? Math.max(0, previous - step.sessions) : null,
+    };
+  });
+}
+
+export function canDrawFunnel(steps: readonly FunnelStep[]): boolean {
+  const visible = steps.filter((step) => step.sessions > 0);
+  const peak = Math.max(0, ...visible.map((step) => step.sessions));
+  return visible.length >= 2 && peak >= MIN_FUNNEL_SESSIONS;
+}
+
+export function skippedFunnelLabels(steps: readonly FunnelStep[]): string[] {
+  return steps.filter((step) => step.sessions === 0).map((step) => step.label);
+}
+
 export function buildProductInsights(
   routes: readonly RouteStat[],
   journey: JourneyGraphResponse | null,
@@ -151,25 +194,42 @@ export function buildInsightRecs(
   products: readonly ProductInsight[],
 ): InsightRec[] {
   const recs: InsightRec[] = [];
+  const drawn = drawnFunnelSteps(steps);
   let worst: FunnelStep | null = null;
-  for (const step of steps) {
+  for (let index = 1; index < drawn.length; index += 1) {
+    const step = drawn[index];
+    const previous = drawn[index - 1];
+    if (!step || !previous || previous.sessions < MIN_FUNNEL_SESSIONS) continue;
     if (step.dropOff === null) continue;
     if (!worst || (step.dropOff ?? 0) > (worst.dropOff ?? 0)) worst = step;
   }
-  if (worst && (worst.dropOff ?? 0) >= 0.4 && worst.dropOffCount) {
+  if (worst && (worst.dropOff ?? 0) >= 0.4 && (worst.dropOffCount ?? 0) >= 5) {
     recs.push({
       title: `${worst.label} is where shoppers leave`,
-      body: `${formatPct(worst.dropOff)} drop off before this step (${worst.dropOffCount.toLocaleString()} sessions). Open the heatmap on the page before it.`,
+      body: `${formatPct(worst.dropOff)} drop off before this step (${worst.dropOffCount?.toLocaleString()} sessions). Open the heatmap on the page before it.`,
       impact: worst.dropOff && worst.dropOff >= 0.55 ? "high" : "medium",
       action: "heatmap",
     });
+  }
+  const last = drawn[drawn.length - 1];
+  if (last && last.sessions >= MIN_FUNNEL_SESSIONS) {
+    const lastIndex = steps.findIndex((step) => step.id === last.id);
+    const next = lastIndex >= 0 ? steps[lastIndex + 1] : undefined;
+    if (next && next.sessions === 0) {
+      recs.push({
+        title: `Nobody reached ${next.label.toLowerCase()}`,
+        body: `${last.sessions.toLocaleString()} ${last.label.toLowerCase()} sessions, then the path stops. Open the heatmap on that step.`,
+        impact: "high",
+        action: "heatmap",
+      });
+    }
   }
   const checkout = steps.find((step) => step.id === "checkout");
   const home = steps.find((step) => step.id === "home");
   if (
     home &&
     checkout &&
-    home.sessions > 0 &&
+    home.sessions >= MIN_FUNNEL_SESSIONS &&
     checkout.sessions / home.sessions < 0.08
   ) {
     recs.push({
@@ -180,7 +240,7 @@ export function buildInsightRecs(
     });
   }
   const quietProduct = [...products]
-    .filter((product) => product.sessions >= 3)
+    .filter((product) => product.sessions >= MIN_FUNNEL_SESSIONS)
     .sort((left, right) => left.clicksPerVisit - right.clicksPerVisit)[0];
   if (quietProduct && quietProduct.clicksPerVisit < 1) {
     recs.push({

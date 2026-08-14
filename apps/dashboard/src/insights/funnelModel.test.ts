@@ -7,6 +7,8 @@ import {
   buildFunnelSteps,
   buildInsightRecs,
   buildProductInsights,
+  canDrawFunnel,
+  drawnFunnelSteps,
 } from "./funnelModel";
 
 function route(
@@ -105,5 +107,34 @@ describe("funnel concept model", () => {
       125_430, 53_620, 23_410, 8_945, 5_234, 3_342,
     ]);
     expect(demo[1]?.fromPrevious).toBeCloseTo(0.427, 2);
+  });
+
+  it("does not invent a funnel or 100% leak from two product sessions", () => {
+    const steps = buildFunnelSteps([route("/products/tee", 2)], null);
+    expect(steps.find((step) => step.id === "product")?.sessions).toBe(2);
+    expect(steps.find((step) => step.id === "cart")?.dropOff).toBeNull();
+    expect(steps.find((step) => step.id === "checkout")?.dropOff).toBeNull();
+    expect(drawnFunnelSteps(steps).map((step) => step.id)).toEqual(["product"]);
+    expect(canDrawFunnel(steps)).toBe(false);
+    expect(buildInsightRecs(steps, [])).toEqual([]);
+  });
+
+  it("omits empty stages so the drawn path only tapers", () => {
+    const steps = buildFunnelSteps([route("/", 80), route("/products/tee", 30)], {
+      ...journey,
+      nodes: [
+        { ...journey.nodes[0]!, sessionCount: 80 },
+        { ...journey.nodes[1]!, sessionCount: 30 },
+      ],
+    });
+    expect(canDrawFunnel(steps)).toBe(true);
+    expect(drawnFunnelSteps(steps).map((step) => step.id)).toEqual(["home", "product"]);
+    expect(steps.find((step) => step.id === "browse")?.dropOff).toBeNull();
+  });
+
+  it("does not recommend a leak when volume is noise", () => {
+    const steps = buildFunnelSteps([route("/", 8), route("/products/tee", 2)], null);
+    expect(canDrawFunnel(steps)).toBe(false);
+    expect(buildInsightRecs(steps, [])).toEqual([]);
   });
 });

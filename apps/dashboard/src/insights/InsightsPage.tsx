@@ -19,7 +19,10 @@ import {
   buildFunnelSteps,
   buildInsightRecs,
   buildProductInsights,
+  canDrawFunnel,
+  drawnFunnelSteps,
   formatPct,
+  skippedFunnelLabels,
   type FunnelStep,
   type FunnelStepId,
 } from "./funnelModel";
@@ -38,13 +41,17 @@ function FunnelShape({ steps }: { steps: readonly FunnelStep[] }) {
   const height = 220;
   const mid = height / 2;
   const peak = Math.max(...steps.map((step) => step.sessions), 1);
-  const minH = 36;
+  const minH = 28;
   const maxH = 176;
   const pad = 8;
   const slice = (width - pad * 2) / Math.max(steps.length, 1);
 
+  // Only taper. Mid-funnel entries must not balloon the shape.
+  let prevH = maxH;
   const bands = steps.map((step, index) => {
-    const h = minH + (step.sessions / peak) * (maxH - minH);
+    const raw = minH + (step.sessions / peak) * (maxH - minH);
+    const h = index === 0 ? raw : Math.min(prevH, raw);
+    prevH = h;
     return {
       step,
       x0: pad + index * slice,
@@ -133,7 +140,11 @@ export function InsightsPage({
   const steps = demo ? buildDemoFunnelSteps() : liveSteps;
   const products = demo ? buildDemoProducts() : liveProducts;
   const recs = demo ? buildDemoRecs() : liveRecs;
-  const home = steps[0]?.sessions ?? 0;
+  const drawn = drawnFunnelSteps(steps);
+  const drawable = demo || canDrawFunnel(steps);
+  const skipped = skippedFunnelLabels(steps);
+  const liveHits = steps.filter((step) => step.sessions > 0);
+  const home = steps.find((step) => step.id === "home")?.sessions ?? 0;
   const checkout = steps.find((step) => step.id === "checkout")?.sessions ?? 0;
   const purchase = steps.find((step) => step.id === "purchase")?.sessions ?? 0;
   const reached = home > 0 ? checkout / home : null;
@@ -144,7 +155,6 @@ export function InsightsPage({
     .filter((product) => product.sessions >= 2)
     .sort((left, right) => left.clicksPerVisit - right.clicksPerVisit)
     .slice(0, 5);
-  const hasTraffic = steps.some((step) => step.sessions > 0);
 
   return (
     <div className="insights" data-demo={demo ? "true" : "false"}>
@@ -196,110 +206,176 @@ export function InsightsPage({
       {pane === "funnel" ? (
         <>
           <section className="funnel-board">
-            <div className="funnel-stage-row">
-              {steps.map((step) => {
-                const Icon = STEP_ICONS[step.id];
-                return (
-                  <div className="funnel-stage" key={step.id}>
-                    <span className="funnel-stage-icon">
-                      <Icon size={18} />
-                    </span>
-                    <strong>{step.label}</strong>
-                    <b>{step.sessions.toLocaleString()}</b>
-                  </div>
-                );
-              })}
-            </div>
+            {drawable ? (
+              <>
+                <div
+                  className="funnel-stage-row"
+                  style={{
+                    gridTemplateColumns: `repeat(${drawn.length}, minmax(0, 1fr))`,
+                  }}
+                >
+                  {drawn.map((step) => {
+                    const Icon = STEP_ICONS[step.id];
+                    return (
+                      <div className="funnel-stage" key={step.id}>
+                        <span className="funnel-stage-icon">
+                          <Icon size={18} />
+                        </span>
+                        <strong>{step.label}</strong>
+                        <b>{step.sessions.toLocaleString()}</b>
+                      </div>
+                    );
+                  })}
+                </div>
 
-            {hasTraffic ? (
-              <FunnelShape steps={steps} />
-            ) : (
-              <div className="funnel-empty">No journey volume in this range yet.</div>
-            )}
+                <FunnelShape steps={drawn} />
 
-            <div className="funnel-drop-row">
-              {steps.slice(1).map((step) =>
-                step.dropOffCount !== null && step.dropOffCount > 0 ? (
-                  <div className="funnel-drop" key={step.id}>
-                    <TrendDown size={14} />
-                    <strong>{step.dropOffCount.toLocaleString()}</strong>
-                    <span>{formatPct(step.dropOff)} drop-off</span>
-                  </div>
-                ) : (
-                  <div className="funnel-drop is-quiet" key={step.id}>
-                    <span>Held through {step.label.toLowerCase()}</span>
-                  </div>
-                ),
-              )}
-            </div>
-            <p className="funnel-legend">
-              Width is traffic. Each % is conversion from the previous step.
-            </p>
-          </section>
-
-          <div className="funnel-kpis">
-            <article>
-              <p>Reached checkout</p>
-              <strong>{formatPct(reached)}</strong>
-              <small>of landing sessions</small>
-            </article>
-            <article>
-              <p>Left before checkout</p>
-              <strong>{formatPct(abandon)}</strong>
-              <small>of carts that never checked out</small>
-            </article>
-            <article>
-              <p>Checkout sessions</p>
-              <strong>{checkout.toLocaleString()}</strong>
-              <small>behavioral checkout, not purchase</small>
-            </article>
-            <article>
-              <p>{demo || purchase > 0 ? "Purchases" : "Purchases"}</p>
-              <strong>{demo || purchase > 0 ? purchase.toLocaleString() : "—"}</strong>
-              <small>
-                {demo || purchase > 0
-                  ? "orders joined to a session"
-                  : "order join is not on yet"}
-              </small>
-            </article>
-          </div>
-
-          <section className="funnel-recs">
-            <h3>
-              <Sparkle size={16} /> What to fix first
-            </h3>
-            <div className="funnel-rec-grid">
-              {recs.length === 0 ? (
-                <p className="funnel-empty">
-                  Need more volume to recommend a next move.
+                <div
+                  className="funnel-drop-row"
+                  style={{
+                    gridTemplateColumns: `repeat(${Math.max(drawn.length - 1, 1)}, minmax(0, 1fr))`,
+                    marginInline: `${50 / Math.max(drawn.length, 1)}%`,
+                  }}
+                >
+                  {drawn.slice(1).map((step, index) => {
+                    const previous = drawn[index];
+                    if (step.dropOffCount !== null && step.dropOffCount > 0) {
+                      return (
+                        <div className="funnel-drop" key={step.id}>
+                          <TrendDown size={14} />
+                          <strong>{step.dropOffCount.toLocaleString()}</strong>
+                          <span>{formatPct(step.dropOff)} drop-off</span>
+                        </div>
+                      );
+                    }
+                    const enteredHere =
+                      previous !== undefined && previous.sessions < step.sessions;
+                    return (
+                      <div className="funnel-drop is-quiet" key={step.id}>
+                        <span>
+                          {enteredHere
+                            ? `Also entered at ${step.label.toLowerCase()}`
+                            : `Held through ${step.label.toLowerCase()}`}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="funnel-legend">
+                  {skipped.length > 0
+                    ? `No sessions on ${skipped.join(", ")} — omitted so the shape only tapers.`
+                    : "Width is traffic. The shape only tapers. Each % is from the previous step shown."}
                 </p>
-              ) : (
-                recs.map((rec) => (
-                  <article data-impact={rec.impact} key={rec.title}>
-                    <em>{rec.impact === "high" ? "High impact" : "Medium impact"}</em>
-                    <b>{rec.title}</b>
-                    <span>{rec.body}</span>
-                    <button
-                      className="control"
-                      disabled={demo}
-                      onClick={() =>
-                        rec.action === "recordings"
-                          ? onOpenRecordings()
-                          : onOpenHeatmap(rec.route)
-                      }
-                      type="button"
-                    >
-                      {demo
-                        ? "Sample only"
-                        : rec.action === "recordings"
-                          ? "View recordings"
-                          : "View heatmap"}
-                    </button>
-                  </article>
-                ))
-              )}
-            </div>
+              </>
+            ) : (
+              <div className="funnel-sparse">
+                <p>Not a funnel yet.</p>
+                <span>
+                  {liveHits.length === 0
+                    ? "No journey volume in this range."
+                    : `${liveHits
+                        .map(
+                          (step) =>
+                            `${step.sessions.toLocaleString()} on ${step.label}`,
+                        )
+                        .join(", ")}. Need traffic on at least two steps.`}
+                </span>
+                <button className="control" onClick={() => setDemo(true)} type="button">
+                  Test with sample data
+                </button>
+                <div className="funnel-stage-row funnel-stage-row-muted">
+                  {steps.map((step) => {
+                    const Icon = STEP_ICONS[step.id];
+                    return (
+                      <div
+                        className="funnel-stage"
+                        data-empty={step.sessions === 0 ? "true" : "false"}
+                        key={step.id}
+                      >
+                        <span className="funnel-stage-icon">
+                          <Icon size={16} />
+                        </span>
+                        <strong>{step.label}</strong>
+                        <b>{step.sessions.toLocaleString()}</b>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </section>
+
+          {drawable ? (
+            <>
+              <div className="funnel-kpis">
+                <article>
+                  <p>Reached checkout</p>
+                  <strong>{formatPct(reached)}</strong>
+                  <small>of landing sessions</small>
+                </article>
+                <article>
+                  <p>Left before checkout</p>
+                  <strong>{formatPct(abandon)}</strong>
+                  <small>of carts that never checked out</small>
+                </article>
+                <article>
+                  <p>Checkout sessions</p>
+                  <strong>{checkout.toLocaleString()}</strong>
+                  <small>behavioral checkout, not purchase</small>
+                </article>
+                <article>
+                  <p>Purchases</p>
+                  <strong>
+                    {demo || purchase > 0 ? purchase.toLocaleString() : "—"}
+                  </strong>
+                  <small>
+                    {demo || purchase > 0
+                      ? "orders joined to a session"
+                      : "order join is not on yet"}
+                  </small>
+                </article>
+              </div>
+
+              <section className="funnel-recs">
+                <h3>
+                  <Sparkle size={16} /> What to fix first
+                </h3>
+                <div className="funnel-rec-grid">
+                  {recs.length === 0 ? (
+                    <p className="funnel-empty">
+                      Need more volume to recommend a next move.
+                    </p>
+                  ) : (
+                    recs.map((rec) => (
+                      <article data-impact={rec.impact} key={rec.title}>
+                        <em>
+                          {rec.impact === "high" ? "High impact" : "Medium impact"}
+                        </em>
+                        <b>{rec.title}</b>
+                        <span>{rec.body}</span>
+                        <button
+                          className="control"
+                          disabled={demo}
+                          onClick={() =>
+                            rec.action === "recordings"
+                              ? onOpenRecordings()
+                              : onOpenHeatmap(rec.route)
+                          }
+                          type="button"
+                        >
+                          {demo
+                            ? "Sample only"
+                            : rec.action === "recordings"
+                              ? "View recordings"
+                              : "View heatmap"}
+                        </button>
+                      </article>
+                    ))
+                  )}
+                </div>
+              </section>
+            </>
+          ) : null}
         </>
       ) : (
         <>
