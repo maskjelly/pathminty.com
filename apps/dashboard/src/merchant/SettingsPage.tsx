@@ -17,7 +17,7 @@ export function SettingsPage({
     <section className="settings-page">
       <header className="settings-head">
         <button className="control" onClick={onBack} type="button">
-          Back to canvas
+          Back to store
         </button>
         <div>
           <p>Workspace</p>

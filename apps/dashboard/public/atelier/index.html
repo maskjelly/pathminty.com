@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>PathMinty — The Store</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --void: #070809;
+        --chrome: #101214;
+        --elev: #17191c;
+        --line: #2a2d32;
+        --bone: #f3eee6;
+        --mute: #8b8680;
+        --heat: #ff5a1f;
+        --heat-soft: #ff8a4c;
+        --mint: #3dcf9a;
+        --ok: #7dcea0;
+        --font: Inter, -apple-system, BlinkMacSystemFont, sans-serif;
+        --display: "Instrument Serif", Georgia, serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: var(--void);
+        color: var(--bone);
+        font-family: var(--font);
+        overflow: hidden;
+      }
+      button,
+      input {
+        font: inherit;
+        color: inherit;
+      }
+      button {
+        cursor: pointer;
+      }
+
+      .shell {
+        display: grid;
+        grid-template-rows: 56px 1fr 52px;
+        grid-template-columns: 64px 1fr;
+        height: 100%;
+      }
+      .top {
+        grid-column: 1 / -1;
+        display: flex;
+        align-items: center;
+        gap: 16px;
+        padding: 0 16px 0 14px;
+        border-bottom: 1px solid var(--line);
+        background: var(--chrome);
+      }
+      .wordmark {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 168px;
+        font-weight: 600;
+        letter-spacing: -0.03em;
+      }
+      .mark {
+        width: 22px;
+        height: 22px;
+        border-radius: 6px;
+        background: #0a1f17;
+        border: 1px solid color-mix(in oklab, var(--mint) 50%, transparent);
+      }
+      .shop {
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        color: var(--mute);
+        font-size: 13px;
+      }
+      .shop b {
+        color: var(--bone);
+        font-weight: 600;
+      }
+      .filters {
+        display: flex;
+        gap: 6px;
+        margin-left: auto;
+      }
+      .pill {
+        height: 32px;
+        padding: 0 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--elev);
+        color: var(--bone);
+        font-size: 12px;
+      }
+      .pill[data-on="true"] {
+        border-color: color-mix(in oklab, var(--heat) 55%, var(--line));
+        background: #2a1610;
+      }
+      .sessions {
+        text-align: right;
+        min-width: 72px;
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--heat);
+        letter-spacing: -0.03em;
+      }
+      .sessions span {
+        display: block;
+        color: var(--mute);
+        font-size: 10px;
+        font-weight: 500;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .rail {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        padding: 12px 0;
+        border-right: 1px solid var(--line);
+        background: var(--chrome);
+      }
+      .rail button {
+        width: 40px;
+        height: 40px;
+        border: 0;
+        border-radius: 10px;
+        background: transparent;
+        color: var(--mute);
+      }
+      .rail button[data-on="true"] {
+        color: var(--heat);
+        background: #2a1610;
+      }
+
+      .stage {
+        position: relative;
+        overflow: hidden;
+        background:
+          radial-gradient(1200px 600px at 50% -10%, #1a120e 0%, transparent 55%),
+          var(--void);
+      }
+
+      .proto {
+        position: absolute;
+        top: 12px;
+        left: 16px;
+        z-index: 4;
+        color: var(--mute);
+        font-size: 11px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      /* —— Store floor —— */
+      .floor {
+        position: absolute;
+        inset: 0;
+        overflow: auto;
+        padding: 48px 48px 32px;
+      }
+      .verdict {
+        max-width: 720px;
+        margin: 0 0 28px;
+      }
+      .verdict p {
+        margin: 0 0 6px;
+        color: var(--mute);
+        font-size: 12px;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+      .verdict h1 {
+        margin: 0;
+        font-family: var(--display);
+        font-size: 42px;
+        font-weight: 400;
+        letter-spacing: -0.03em;
+        line-height: 1.05;
+      }
+      .verdict h1 em {
+        font-style: italic;
+        color: var(--heat-soft);
+      }
+      .verdict button {
+        margin-top: 14px;
+        height: 34px;
+        padding: 0 14px;
+        border: 0;
+        border-radius: 8px;
+        background: var(--heat);
+        color: #1a0904;
+        font-size: 13px;
+        font-weight: 600;
+      }
+
+      .path {
+        display: flex;
+        align-items: stretch;
+        gap: 0;
+        min-width: 1180px;
+      }
+      .page {
+        width: 260px;
+        flex: none;
+        border: 1px solid var(--line);
+        border-radius: 14px;
+        background: #fff;
+        color: #111;
+        overflow: hidden;
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
+        text-align: left;
+        padding: 0;
+      }
+      .page.ghost {
+        opacity: 0.28;
+        filter: grayscale(0.4);
+        box-shadow: none;
+      }
+      .page-bar {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 10px;
+        background: #f6f4f0;
+        color: #6b6660;
+        font-size: 10px;
+      }
+      .mini {
+        height: 168px;
+        padding: 10px 12px 0;
+        background: #faf8f5;
+      }
+      .mini .nav {
+        display: flex;
+        justify-content: space-between;
+        font-size: 8px;
+        letter-spacing: 0.14em;
+        color: #888;
+      }
+      .mini h3 {
+        margin: 10px 0 8px;
+        font-family: var(--display);
+        font-size: 18px;
+        font-weight: 400;
+      }
+      .hero {
+        height: 72px;
+        border-radius: 6px;
+        background: linear-gradient(120deg, #d9c3b0, #efe7dc);
+      }
+      .grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px;
+        margin-top: 8px;
+      }
+      .swatch {
+        height: 42px;
+        border-radius: 4px;
+        background: #e7ddd2;
+      }
+      .page img.thumb {
+        display: block;
+        width: 100%;
+        height: 168px;
+        object-fit: cover;
+        object-position: top;
+      }
+      .page-meta {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        padding: 10px 12px 12px;
+        background: #111;
+        color: var(--bone);
+      }
+      .page-meta strong {
+        display: block;
+        font-size: 13px;
+      }
+      .page-meta small {
+        color: var(--mute);
+        font-size: 11px;
+      }
+      .page-meta b {
+        font-size: 16px;
+        letter-spacing: -0.03em;
+      }
+
+      .edge {
+        width: 88px;
+        flex: none;
+        display: grid;
+        place-items: center;
+        position: relative;
+      }
+      .edge i {
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 3px;
+        border-radius: 99px;
+        background: #3a3a3a;
+      }
+      .edge[data-leak="high"] i {
+        height: 10px;
+        background: linear-gradient(90deg, var(--heat), #5a1c10);
+      }
+      .edge[data-leak="mid"] i {
+        height: 6px;
+        background: linear-gradient(90deg, #c47a3a, #3a3a3a);
+      }
+      .edge button {
+        position: relative;
+        z-index: 1;
+        padding: 5px 8px;
+        border: 1px solid #5a2218;
+        border-radius: 99px;
+        background: #1a0c0a;
+        color: var(--heat-soft);
+        font-size: 11px;
+        font-weight: 600;
+      }
+      .edge[data-leak="none"] button {
+        border-color: var(--line);
+        background: var(--elev);
+        color: var(--ok);
+      }
+
+      .sources {
+        display: flex;
+        gap: 8px;
+        margin: 22px 0 0;
+      }
+      .src {
+        padding: 8px 10px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--elev);
+        font-size: 12px;
+        color: var(--mute);
+      }
+      .src b {
+        display: block;
+        color: var(--bone);
+        font-size: 13px;
+      }
+
+      /* —— Page inspect —— */
+      .inspect {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        grid-template-rows: 1fr 64px;
+      }
+      .page-stage {
+        position: relative;
+        margin: 16px 20px 0;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        overflow: hidden;
+        background: #fff;
+      }
+      .page-stage img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: top;
+      }
+      .insight {
+        position: absolute;
+        right: 18px;
+        bottom: 18px;
+        width: 280px;
+        padding: 14px;
+        border-radius: 12px;
+        background: #111214ee;
+        border: 1px solid #2a2d32;
+        backdrop-filter: blur(10px);
+      }
+      .insight em {
+        display: block;
+        margin-bottom: 6px;
+        color: var(--heat);
+        font-size: 11px;
+        font-style: normal;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      .insight p {
+        margin: 0 0 12px;
+        font-size: 14px;
+        line-height: 1.4;
+      }
+      .insight button {
+        width: 100%;
+        height: 34px;
+        border: 0;
+        border-radius: 8px;
+        background: var(--heat);
+        color: #1a0904;
+        font-weight: 600;
+        font-size: 13px;
+      }
+      .back {
+        position: absolute;
+        top: 28px;
+        left: 32px;
+        z-index: 3;
+        height: 32px;
+        padding: 0 12px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: #111214cc;
+      }
+
+      .timeline {
+        display: grid;
+        grid-template-columns: 44px 1fr 160px;
+        align-items: center;
+        gap: 12px;
+        padding: 0 20px;
+        border-top: 1px solid var(--line);
+        background: var(--chrome);
+      }
+      .bars {
+        display: flex;
+        align-items: end;
+        gap: 3px;
+        height: 28px;
+      }
+      .bars span {
+        flex: 1;
+        border-radius: 2px 2px 0 0;
+        background: var(--heat);
+        opacity: 0.85;
+      }
+      .legend {
+        color: var(--mute);
+        font-size: 11px;
+        text-align: right;
+      }
+
+      /* —— Sparse —— */
+      .sparse {
+        position: absolute;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        padding: 40px;
+      }
+      .sparse-card {
+        width: min(520px, 100%);
+        text-align: center;
+      }
+      .sparse-card h1 {
+        margin: 16px 0 8px;
+        font-family: var(--display);
+        font-size: 40px;
+        font-weight: 400;
+      }
+      .sparse-card p {
+        margin: 0 0 18px;
+        color: var(--mute);
+        line-height: 1.5;
+      }
+      .lonely {
+        width: 220px;
+        margin: 0 auto 20px;
+      }
+
+      .dock {
+        grid-column: 2;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 0 16px;
+        border-top: 1px solid var(--line);
+        background: var(--chrome);
+        color: var(--mute);
+        font-size: 12px;
+      }
+      .dock button {
+        height: 28px;
+        padding: 0 10px;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        background: var(--elev);
+      }
+      .dock button[data-on="true"] {
+        color: var(--bone);
+        border-color: #444;
+      }
+
+      @media (max-width: 900px) {
+        .shell {
+          grid-template-columns: 1fr;
+          grid-template-rows: 52px 1fr 48px;
+        }
+        .rail,
+        .shop,
+        .sessions {
+          display: none;
+        }
+        .path {
+          min-width: 0;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .edge {
+          width: auto;
+          height: 36px;
+        }
+        .verdict h1 {
+          font-size: 28px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="shell">
+      <header class="top">
+        <div class="wordmark">
+          <span class="mark"></span>
+          pathminty
+        </div>
+        <div class="shop">
+          <span>Store <b>Heavenly</b></span>
+          <span id="pageLabel">The floor</span>
+        </div>
+        <div class="filters">
+          <button class="pill" data-on="true" type="button">Last 7 days</button>
+          <button class="pill" data-on="true" type="button">Desktop</button>
+          <button class="pill" data-on="true" type="button">Clicks</button>
+        </div>
+        <div class="sessions" id="sessionCount">
+          18.4k
+          <span>sessions</span>
+        </div>
+      </header>
+
+      <nav class="rail" aria-label="Primary">
+        <button data-on="true" data-go="store" title="The store" type="button">
+          ▣
+        </button>
+        <button data-go="page" title="This page" type="button">◎</button>
+        <button data-go="sparse" title="Quiet shop" type="button">◌</button>
+      </nav>
+
+      <div class="stage">
+        <div class="proto">Prototype · sample store · not your live shop</div>
+
+        <section class="floor" id="view-store">
+          <div class="verdict">
+            <p>What to fix first</p>
+            <h1>Shoppers leave after landing. <em>Home loses 57%.</em></h1>
+            <button data-go="page" type="button">Open the leak on Home</button>
+          </div>
+          <div class="path">
+            <button class="page" data-go="page" type="button">
+              <div class="page-bar">heavenly.com &nbsp; /</div>
+              <div class="mini">
+                <div class="nav"><span>WOMEN MEN</span><span>BAG</span></div>
+                <h3>New season</h3>
+                <div class="hero"></div>
+              </div>
+              <div class="page-meta">
+                <span><strong>Home</strong><small>landing</small></span>
+                <b>12.5k</b>
+              </div>
+            </button>
+            <div class="edge" data-leak="high">
+              <i></i>
+              <button type="button" data-go="page">−7.1k</button>
+            </div>
+            <button class="page" data-go="page" type="button">
+              <img class="thumb" src="../assets/heavenly-heatmap.png" alt="" />
+              <div class="page-meta">
+                <span><strong>Collection</strong><small>/collections/tops</small></span>
+                <b>5.4k</b>
+              </div>
+            </button>
+            <div class="edge" data-leak="mid">
+              <i></i>
+              <button type="button">−3.0k</button>
+            </div>
+            <button class="page" type="button">
+              <div class="page-bar">heavenly.com &nbsp; /products/blazer</div>
+              <div class="mini">
+                <div class="nav"><span>BACK</span><span>BAG</span></div>
+                <h3>Linen blazer</h3>
+                <div
+                  class="hero"
+                  style="background: linear-gradient(120deg, #c9b7a4, #8a7460)"
+                ></div>
+                <div class="grid">
+                  <div class="swatch"></div>
+                  <div class="swatch" style="background: #cfc6bb"></div>
+                </div>
+              </div>
+              <div class="page-meta">
+                <span><strong>Product</strong><small>23% reach checkout</small></span>
+                <b>2.3k</b>
+              </div>
+            </button>
+            <div class="edge" data-leak="none">
+              <i></i>
+              <button type="button">held</button>
+            </div>
+            <button class="page" type="button">
+              <div class="page-bar">heavenly.com &nbsp; /cart</div>
+              <div class="mini">
+                <div class="nav"><span>CART</span><span>2</span></div>
+                <h3>Bag</h3>
+                <div class="hero" style="height: 40px"></div>
+                <div
+                  class="hero"
+                  style="height: 40px; margin-top: 8px; opacity: 0.6"
+                ></div>
+              </div>
+              <div class="page-meta">
+                <span><strong>Cart</strong><small>then checkout</small></span>
+                <b>894</b>
+              </div>
+            </button>
+          </div>
+          <div class="sources">
+            <div class="src"><b>Instagram</b> 4,102 landed on Home</div>
+            <div class="src"><b>Google / cpc</b> 2,661 landed on Collection</div>
+            <div class="src"><b>Direct</b> 1,904 mixed entries</div>
+          </div>
+        </section>
+
+        <section class="inspect" id="view-page" hidden>
+          <button class="back" data-go="store" type="button">← Store</button>
+          <div class="page-stage">
+            <img src="../assets/heavenly-heatmap.png" alt="Collection heatmap" />
+            <aside class="insight">
+              <em>On this page</em>
+              <p>
+                Shoppers who use Size M convert 2.3× more — but most never notice it.
+              </p>
+              <button type="button">Watch matching sessions</button>
+            </aside>
+          </div>
+          <div class="timeline">
+            <button class="pill" type="button">▶</button>
+            <div class="bars" aria-hidden="true"></div>
+            <div class="legend">Heat is density. Not 10k dots.</div>
+          </div>
+        </section>
+
+        <section class="sparse" id="view-sparse" hidden>
+          <div class="sparse-card">
+            <button class="page lonely" type="button">
+              <div class="page-bar">your-store.com &nbsp; /products/tee</div>
+              <div class="mini">
+                <h3>Product</h3>
+                <div class="hero"></div>
+              </div>
+              <div class="page-meta">
+                <span><strong>Product</strong><small>only traffic so far</small></span>
+                <b>2</b>
+              </div>
+            </button>
+            <h1>Not a path yet.</h1>
+            <p>
+              Two sessions on one product. Home, collection, cart — empty. We do not
+              invent a funnel, a 100% leak, or a heatmap of two clicks.
+            </p>
+            <button class="pill" data-go="store" type="button">See a full store</button>
+          </div>
+        </section>
+      </div>
+
+      <footer class="dock">
+        <span>Show</span>
+        <button data-go="store" data-on="true" type="button">Full store</button>
+        <button data-go="page" type="button">One page</button>
+        <button data-go="sparse" type="button">Quiet shop</button>
+        <span style="margin-left: auto"
+          >The store is the product. Tabs were the mistake.</span
+        >
+      </footer>
+    </div>
+    <script>
+      const bars = document.querySelector(".bars");
+      if (bars) {
+        const h = [18, 22, 16, 28, 24, 20, 32, 26, 14, 19, 23, 17, 12, 9, 7, 6];
+        bars.innerHTML = h.map((n) => `<span style="height:${n}px"></span>`).join("");
+      }
+      const views = {
+        store: document.getElementById("view-store"),
+        page: document.getElementById("view-page"),
+        sparse: document.getElementById("view-sparse"),
+      };
+      const pageLabel = document.getElementById("pageLabel");
+      const sessionCount = document.getElementById("sessionCount");
+      function show(name) {
+        Object.entries(views).forEach(([key, node]) => {
+          node.hidden = key !== name;
+        });
+        document.querySelectorAll("[data-go]").forEach((el) => {
+          if (el.matches(".dock button, .rail button")) {
+            el.dataset.on = el.dataset.go === name ? "true" : "false";
+          }
+        });
+        pageLabel.textContent =
+          name === "page"
+            ? "/collections/tops"
+            : name === "sparse"
+              ? "Quiet shop"
+              : "The floor";
+        sessionCount.innerHTML =
+          name === "sparse" ? `2<span>sessions</span>` : `18.4k<span>sessions</span>`;
+      }
+      document.addEventListener("click", (event) => {
+        const go = event.target.closest("[data-go]");
+        if (go) show(go.dataset.go);
+      });
+    </script>
+  </body>
+</html>

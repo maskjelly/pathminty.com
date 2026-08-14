@@ -1,15 +1,12 @@
 import {
   ArrowClockwise,
   ArrowLeft,
-  ChartLine,
   CursorClick,
   DeviceMobile,
   GearSix,
-  MapTrifold,
   Monitor,
   Play,
-  Record,
-  Storefront,
+  SquaresFour,
 } from "@phosphor-icons/react";
 import type {
   ActivityTimelineResponse,
@@ -45,22 +42,18 @@ import { BrandMark } from "./BrandMark";
 import { Landing } from "./marketing/Landing";
 import { SettingsPage } from "./merchant/SettingsPage";
 import { ActivityTimeline } from "./components/ActivityTimeline";
-import { CanvasToolbar } from "./components/CanvasToolbar";
 import { HeatmapSurface } from "./components/HeatmapSurface";
 import { ReplayViewer } from "./components/ReplayViewer";
-import { SiteCanvas, type SiteCanvasHandle } from "./components/SiteCanvas";
-import { InsightsPage } from "./insights/InsightsPage";
+import {
+  buildDemoRecs,
+  buildFunnelSteps,
+  buildInsightRecs,
+  buildProductInsights,
+} from "./insights/funnelModel";
 import { displayRouteLabel, isHomeRoute, pinHomePath } from "./siteCanvasLayout";
+import { StoreFloor } from "./store/StoreFloor";
 
-type View = "Heatmaps" | "Insights" | "Recordings" | "Settings";
-type HeatmapPane = "map" | "route";
-
-const views: Array<{ label: View; icon: typeof MapTrifold }> = [
-  { label: "Heatmaps", icon: MapTrifold },
-  { label: "Insights", icon: ChartLine },
-  { label: "Recordings", icon: Record },
-  { label: "Settings", icon: GearSix },
-];
+type Surface = "store" | "settings";
 
 const TIME_PRESETS: Array<{ id: TimeRangePreset; label: string }> = [
   { id: "1h", label: "1h" },
@@ -199,7 +192,9 @@ function SessionRows({
 }
 
 export function LiveDashboard() {
-  const [view, setView] = useState<View>("Heatmaps");
+  const [surface, setSurface] = useState<Surface>("store");
+  const [demo, setDemo] = useState(false);
+  const [watchOpen, setWatchOpen] = useState(false);
   const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
   const [error, setError] = useState("");
   const [shopId, setShopId] = useState<string | null>(null);
@@ -213,9 +208,9 @@ export function LiveDashboard() {
     if (heatmapMode === "scroll") setHeatmapMode("click");
   }, [heatmapMode]);
   const [timePreset, setTimePreset] = useState<TimeRangePreset>("24h");
-  const [routeSort, setRouteSort] = useState<RouteSort>("most_active");
-  const [routeQuery, setRouteQuery] = useState("");
-  const [routeLimit, setRouteLimit] = useState(SITE_MAP_PAGE);
+  const routeSort: RouteSort = "most_active";
+  const routeQuery = "";
+  const routeLimit = SITE_MAP_PAGE;
   const [selectedRoute, setSelectedRoute] = useState<string | null>(null);
   const [scrubIndex, setScrubIndex] = useState<number | null>(null);
   const [heatmap, setHeatmap] = useState<HeatmapResponse | null>(null);
@@ -227,11 +222,9 @@ export function LiveDashboard() {
   const [replayLoading, setReplayLoading] = useState(false);
   const [workspace, setWorkspace] = useState<ShopWorkspace | null>(null);
   const [hideBots, setHideBots] = useState(true);
-  const [sessionQuery, setSessionQuery] = useState("");
-  const [pageFilter, setPageFilter] = useState("all");
+  const sessionQuery = "";
+  const pageFilter = "all";
   const [planBusy, setPlanBusy] = useState(false);
-  const [canvasScale, setCanvasScale] = useState(0.35);
-  const canvasRef = useRef<SiteCanvasHandle | null>(null);
   const lastHeatMode = useRef<HeatmapMode>(heatmapMode);
   const [hasTicket] = useState(() => {
     const search = new URLSearchParams(window.location.search);
@@ -240,8 +233,6 @@ export function LiveDashboard() {
   });
 
   const timeQuery = useMemo<TimeQuery>(() => ({ preset: timePreset }), [timePreset]);
-  const heatmapPane: HeatmapPane = selectedRoute ? "route" : "map";
-
   const recordingSessions = useMemo(() => {
     const matched = sessions.filter((session) => {
       if (pageFilter === "all") return true;
@@ -258,16 +249,18 @@ export function LiveDashboard() {
     });
   }, [pageFilter, sessions]);
 
-  const recordingPages = useMemo(() => {
-    const counts = new Map<string, number>();
-    for (const session of sessions) {
-      counts.set(session.entryRoute, (counts.get(session.entryRoute) ?? 0) + 1);
-    }
-    const rest = [...counts.keys()]
-      .filter((route) => !isHomeRoute(route))
-      .sort((left, right) => (counts.get(right) ?? 0) - (counts.get(left) ?? 0));
-    return { rest: rest.slice(0, 6) };
-  }, [sessions]);
+  const liveSteps = useMemo(
+    () => buildFunnelSteps(routeIndex?.routes ?? [], journey),
+    [journey, routeIndex],
+  );
+  const liveProducts = useMemo(
+    () => buildProductInsights(routeIndex?.routes ?? [], journey),
+    [journey, routeIndex],
+  );
+  const recs = useMemo(
+    () => (demo ? buildDemoRecs() : buildInsightRecs(liveSteps, liveProducts)),
+    [demo, liveProducts, liveSteps],
+  );
 
   const loadSessions = useCallback(
     async (shop: string) => {
@@ -361,7 +354,7 @@ export function LiveDashboard() {
 
   // Route-scoped timeline while drilling into a page heatmap.
   useEffect(() => {
-    if (!shopId || view !== "Heatmaps" || !selectedRoute) return;
+    if (!shopId || surface !== "store" || !selectedRoute) return;
     let cancelled = false;
     void getActivity(shopId, {
       time: timeQuery,
@@ -376,7 +369,7 @@ export function LiveDashboard() {
     return () => {
       cancelled = true;
     };
-  }, [shopId, view, selectedRoute, timeQuery, device, heatmapMode]);
+  }, [shopId, surface, selectedRoute, timeQuery, device, heatmapMode]);
 
   // Auth bootstrap once.
   useEffect(() => {
@@ -427,28 +420,28 @@ export function LiveDashboard() {
 
   // Initial + filter-driven loads for heatmaps site map (no auto-poll).
   useEffect(() => {
-    if (!shopId || (view !== "Heatmaps" && view !== "Insights")) return;
+    if (!shopId || surface !== "store") return;
     void loadSiteMap(shopId);
-  }, [shopId, view, loadSiteMap]);
+  }, [shopId, surface, loadSiteMap]);
 
   useEffect(() => {
-    if (!shopId || view !== "Heatmaps") return;
+    if (!shopId || surface !== "store") return;
     if (lastHeatMode.current === heatmapMode) return;
     lastHeatMode.current = heatmapMode;
     void loadHeatMode(shopId, heatmapMode);
-  }, [heatmapMode, loadHeatMode, shopId, view]);
+  }, [heatmapMode, loadHeatMode, shopId, surface]);
 
   // Sessions for recordings tab (and manual refresh).
   useEffect(() => {
-    if (!shopId || view !== "Recordings") return;
+    if (!shopId || (!watchOpen && !selectedRoute)) return;
     void loadSessions(shopId).catch((caught: unknown) => {
       setError(caught instanceof Error ? caught.message : "Unable to load sessions.");
     });
-  }, [shopId, view, loadSessions]);
+  }, [shopId, watchOpen, selectedRoute, loadSessions]);
 
   // Live poll only on Recordings while the tab is visible.
   useEffect(() => {
-    if (!shopId || view !== "Recordings") return;
+    if (!shopId || (!watchOpen && !selectedRoute)) return;
     const tick = () => {
       if (document.visibilityState !== "visible") return;
       void loadSessions(shopId).catch(() => undefined);
@@ -462,11 +455,11 @@ export function LiveDashboard() {
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [shopId, view, loadSessions]);
+  }, [shopId, watchOpen, selectedRoute, loadSessions]);
 
   // Drill-in full heatmap — depends on route + scrub, not session list refreshes.
   useEffect(() => {
-    if (!shopId || !selectedRoute || view !== "Heatmaps") {
+    if (!shopId || !selectedRoute || surface !== "store") {
       setHeatmap(null);
       return;
     }
@@ -509,7 +502,7 @@ export function LiveDashboard() {
     timeQuery,
     scrubIndex,
     activity,
-    view,
+    surface,
   ]);
 
   // Reset scrub when leaving 24h or changing route.
@@ -569,93 +562,167 @@ export function LiveDashboard() {
   };
 
   const refresh = () => {
-    if (view === "Settings") {
+    if (surface === "settings") {
       void getWorkspace(shopId)
         .then(setWorkspace)
         .catch(() => undefined);
       return;
     }
-    if (view === "Recordings") {
+    if (watchOpen || selectedRoute) {
       void loadSessions(shopId).catch((caught: unknown) => {
         setError(
           caught instanceof Error ? caught.message : "Unable to refresh sessions.",
         );
       });
-      return;
     }
     void loadSiteMap(shopId);
   };
 
-  const activeCount = sessions.filter((session) => session.status === "active").length;
-  const dataStatus =
-    view === "Recordings"
-      ? sessions.length === 0
-        ? "Awaiting data"
-        : activeCount > 0
-          ? `${activeCount} active · live`
-          : "Live when tab open"
-      : mapLoading
-        ? "Loading canvas…"
-        : routeIndex
-          ? `${routeIndex.totalRoutes} pages · ${timePreset}`
-          : "Canvas";
+  const openPage = (route: string) => {
+    setSurface("store");
+    setSelectedRoute(route);
+    setWatchOpen(false);
+  };
 
-  const showTimeline = Boolean(activity && activity.buckets.length > 0);
+  const openWatch = (route?: string) => {
+    if (route) setSelectedRoute(route);
+    setWatchOpen(true);
+    setSurface("store");
+  };
+
+  const activeCount = sessions.filter((session) => session.status === "active").length;
+  const pageSessions = selectedRoute
+    ? sessions.filter(
+        (session) =>
+          session.entryRoute === selectedRoute ||
+          (session.routes ?? []).includes(selectedRoute),
+      )
+    : recordingSessions;
+  const showTimeline = Boolean(
+    selectedRoute && activity && activity.buckets.length > 0,
+  );
+  const sessionTotal = routeIndex?.totalSessions ?? 0;
 
   return (
-    <div className="app-shell live-shell">
+    <div className="app-shell live-shell" data-demo={demo ? "true" : "false"}>
       <aside className="rail" aria-label="Primary navigation">
         <button
           className="brand-mark"
           onClick={() => {
-            setView("Heatmaps");
+            setSurface("store");
             setSelectedRoute(null);
+            setWatchOpen(false);
           }}
           title="PathMinty"
           type="button"
-          aria-label="PathMinty home"
+          aria-label="PathMinty store"
         >
           <BrandMark size={36} />
         </button>
         <nav className="rail-nav">
-          {views.map(({ label, icon: Icon }) => (
-            <button
-              className="rail-button"
-              data-active={view === label}
-              key={label}
-              onClick={() => {
-                setView(label);
-                if (label === "Heatmaps") setSelectedRoute(null);
-              }}
-              title={label}
-              type="button"
-            >
-              <Icon size={20} weight={view === label ? "fill" : "regular"} />
-              <span>{label}</span>
-            </button>
-          ))}
+          <button
+            className="rail-button"
+            data-active={surface === "store" && !selectedRoute}
+            onClick={() => {
+              setSurface("store");
+              setSelectedRoute(null);
+            }}
+            title="Store"
+            type="button"
+          >
+            <SquaresFour size={20} weight={!selectedRoute ? "fill" : "regular"} />
+            <span>Store</span>
+          </button>
+          <button
+            className="rail-button"
+            data-active={surface === "settings"}
+            onClick={() => setSurface("settings")}
+            title="Settings"
+            type="button"
+          >
+            <GearSix size={20} weight={surface === "settings" ? "fill" : "regular"} />
+            <span>Plan</span>
+          </button>
         </nav>
       </aside>
-      <main
-        className="workspace live-workspace"
-        data-canvas={view === "Heatmaps" && !selectedRoute ? "true" : "false"}
-      >
-        <header className="topbar">
+      <main className="workspace live-workspace" data-store="true">
+        <header className="topbar store-topbar">
           <div className="title-lockup">
-            <p>PathMinty</p>
+            <p>{shopLabel(shopId)}</p>
             <h1>
-              {view === "Heatmaps"
-                ? heatmapPane === "route"
-                  ? "Route heatmap"
-                  : "Site canvas"
-                : view}
+              {surface === "settings"
+                ? "Plan & privacy"
+                : selectedRoute
+                  ? displayRouteLabel(selectedRoute)
+                  : "The store"}
             </h1>
           </div>
           <div className="topbar-actions">
+            <div className="mode-switch" aria-label="Time range">
+              {TIME_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  data-active={timePreset === preset.id}
+                  onClick={() => setTimePreset(preset.id)}
+                  type="button"
+                >
+                  {preset.label}
+                </button>
+              ))}
+            </div>
+            <div className="device-switch" aria-label="Device">
+              <button
+                data-active={device === "all"}
+                onClick={() => setDevice("all")}
+                type="button"
+              >
+                All
+              </button>
+              <button
+                data-active={device === "desktop"}
+                onClick={() => setDevice("desktop")}
+                type="button"
+              >
+                <Monitor size={16} />
+              </button>
+              <button
+                data-active={device === "mobile"}
+                onClick={() => setDevice("mobile")}
+                type="button"
+              >
+                <DeviceMobile size={16} />
+              </button>
+            </div>
+            {selectedRoute ? (
+              <div className="mode-switch" aria-label="Heatmap mode">
+                <button
+                  data-active={heatmapMode === "click"}
+                  onClick={() => setHeatmapMode("click")}
+                  type="button"
+                >
+                  Click
+                </button>
+                <button
+                  data-active={heatmapMode === "hover"}
+                  onClick={() => setHeatmapMode("hover")}
+                  type="button"
+                >
+                  Hover
+                </button>
+              </div>
+            ) : null}
+            <button
+              className="control"
+              data-active={demo ? "true" : "false"}
+              onClick={() => setDemo((current) => !current)}
+              type="button"
+            >
+              {demo ? "Show real data" : "Sample"}
+            </button>
             {workspace ? (
               <button
                 className="quota-chip"
-                onClick={() => setView("Settings")}
+                onClick={() => setSurface("settings")}
                 title="Plan and usage"
                 type="button"
               >
@@ -671,16 +738,12 @@ export function LiveDashboard() {
                     }}
                   />
                 </span>
-                {workspace.usage.billableSessions}/{workspace.usage.limit} ·{" "}
-                {workspace.plan.name}
+                {workspace.usage.billableSessions}/{workspace.usage.limit}
               </button>
             ) : null}
-            <span className="demo-chip live-chip">
-              <span /> {dataStatus}
-            </span>
-            <span className="control store-switcher" title={shopId}>
-              <Storefront size={16} />
-              {shopLabel(shopId)}
+            <span className="sessions-count">
+              {mapLoading ? "Loading…" : `${sessionTotal.toLocaleString()} sessions`}
+              {activeCount > 0 ? ` · ${activeCount} live` : ""}
             </span>
             <button
               className="icon-button"
@@ -699,7 +762,7 @@ export function LiveDashboard() {
           </div>
         )}
 
-        {workspace && workspace.health.hint !== "ok" && view !== "Settings" ? (
+        {workspace && workspace.health.hint !== "ok" && surface !== "settings" ? (
           <div className="health-banner" data-hint={workspace.health.hint}>
             {workspace.health.hint === "awaiting_traffic"
               ? "Connected. Browse the storefront with analytics consent to see the first session."
@@ -713,261 +776,136 @@ export function LiveDashboard() {
           </div>
         ) : null}
 
-        {view === "Insights" ? (
-          <InsightsPage
-            journey={journey}
-            onOpenHeatmap={(route) => {
-              setView("Heatmaps");
-              if (route) setSelectedRoute(route);
-              else setSelectedRoute(null);
-            }}
-            onOpenRecordings={() => setView("Recordings")}
-            routes={routeIndex?.routes ?? []}
-          />
-        ) : null}
-
-        {view === "Settings" && workspace ? (
+        {surface === "settings" && workspace ? (
           <SettingsPage
             busy={planBusy}
-            onBack={() => setView("Heatmaps")}
+            onBack={() => setSurface("store")}
             onSelectPlan={changePlan}
             workspace={workspace}
           />
         ) : null}
 
-        {view === "Heatmaps" && (
-          <>
-            {selectedRoute ? (
-              <section className="live-toolbar site-toolbar">
-                <button
-                  className="control back-control"
-                  onClick={() => setSelectedRoute(null)}
-                  type="button"
-                >
-                  <ArrowLeft size={14} /> Canvas
-                </button>
-                <div className="mode-switch" aria-label="Time range">
-                  {TIME_PRESETS.map((preset) => (
-                    <button
-                      key={preset.id}
-                      data-active={timePreset === preset.id}
-                      onClick={() => setTimePreset(preset.id)}
-                      type="button"
-                    >
-                      {preset.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="mode-switch" aria-label="Heatmap mode">
+        {surface === "store" && selectedRoute ? (
+          <section className="store-inspect">
+            <div className="store-inspect-bar">
+              <button
+                className="control back-control"
+                onClick={() => {
+                  setSelectedRoute(null);
+                  setWatchOpen(false);
+                }}
+                type="button"
+              >
+                <ArrowLeft size={14} /> Store
+              </button>
+              <span className="route-pill" title={selectedRoute}>
+                {selectedRoute}
+              </span>
+              <span>
+                {heatmap?.eventCount ?? 0} events · {heatmap?.sessionCount ?? 0}{" "}
+                sessions
+                {scrubIndex !== null ? " · scrubbed" : ""}
+              </span>
+            </div>
+            <div className="store-inspect-stage">
+              <HeatmapSurface heatmap={heatmap} loading={heatmapLoading} />
+              {recs[0] && !demo ? (
+                <aside className="store-insight">
+                  <em>{recs[0].impact === "high" ? "Fix first" : "Worth a look"}</em>
+                  <p>{recs[0].title}</p>
+                  <span>{recs[0].body}</span>
                   <button
-                    data-active={heatmapMode === "click"}
-                    onClick={() => setHeatmapMode("click")}
+                    className="store-heat-btn"
+                    onClick={() => openWatch(selectedRoute)}
                     type="button"
                   >
-                    Click
+                    Watch matching sessions
                   </button>
+                </aside>
+              ) : (
+                <aside className="store-insight">
+                  <em>On this page</em>
+                  <p>
+                    {heatmap?.sessionCount ?? 0} sessions in {timePreset}. Heatmaps
+                    count every visit.
+                  </p>
                   <button
-                    data-active={heatmapMode === "hover"}
-                    onClick={() => setHeatmapMode("hover")}
+                    className="store-heat-btn"
+                    onClick={() => openWatch(selectedRoute)}
                     type="button"
                   >
-                    Hover
+                    Watch matching sessions
                   </button>
-                </div>
-                <span className="route-pill" title={selectedRoute}>
-                  {selectedRoute}
-                </span>
-              </section>
-            ) : null}
-
-            {selectedRoute ? (
-              <div className="heatmap-drill">
-                <div className="heatmap-drill-meta">
-                  <span>
-                    {heatmap?.eventCount ?? 0} events · {heatmap?.sessionCount ?? 0}{" "}
-                    sessions
-                    {scrubIndex !== null ? " · scrubbed" : ""}
-                  </span>
-                </div>
-                <HeatmapSurface heatmap={heatmap} loading={heatmapLoading} />
-              </div>
-            ) : (
-              <div className="canvas-stage">
-                <CanvasToolbar
-                  device={device}
-                  heatmapMode={heatmapMode}
-                  onDevice={setDevice}
-                  onFit={() => canvasRef.current?.fitAll()}
-                  onHeatmapMode={setHeatmapMode}
-                  onRefresh={refresh}
-                  onRouteQuery={(value) => {
-                    setRouteQuery(value);
-                    setRouteLimit(SITE_MAP_PAGE);
-                  }}
-                  onRouteSort={setRouteSort}
-                  onTimePreset={setTimePreset}
-                  onZoomIn={() => canvasRef.current?.zoomIn()}
-                  onZoomOut={() => canvasRef.current?.zoomOut()}
-                  routeQuery={routeQuery}
-                  routeSort={routeSort}
-                  scale={canvasScale}
-                  timePreset={timePreset}
-                />
-                <section className="site-canvas-section" aria-label="Site canvas">
-                  {mapLoading && !routeIndex ? (
-                    <p className="site-map-status">Building canvas…</p>
-                  ) : routeIndex && routeIndex.routes.length === 0 ? (
-                    <EmptySessions onRefresh={refresh} />
-                  ) : (
-                    <>
-                      <SiteCanvas
-                        heatmaps={miniHeatmaps}
-                        journey={journey}
-                        onOpenRoute={setSelectedRoute}
-                        onScaleChange={setCanvasScale}
-                        ref={canvasRef}
-                        routes={routeIndex?.routes ?? []}
-                      />
-                      {routeIndex && routeIndex.totalRoutes > routeLimit && (
-                        <button
-                          className="control show-more"
-                          onClick={() =>
-                            setRouteLimit((value) => value + SITE_MAP_PAGE)
-                          }
-                          type="button"
-                        >
-                          Load more pages ({routeIndex.totalRoutes - routeLimit} left)
-                        </button>
-                      )}
-                    </>
-                  )}
-                </section>
-              </div>
-            )}
-
-            {showTimeline && activity && heatmapPane === "route" && (
+                </aside>
+              )}
+            </div>
+            {showTimeline && activity ? (
               <ActivityTimeline
                 buckets={activity.buckets}
                 selectedIndex={scrubIndex}
                 onSelect={setScrubIndex}
               />
-            )}
-          </>
-        )}
+            ) : null}
+          </section>
+        ) : null}
 
-        {view === "Recordings" &&
-          (sessions.length === 0 ? (
-            <EmptySessions onRefresh={refresh} />
-          ) : (
-            <div className="live-content">
-              <section className="live-panel">
-                <div className="panel-heading">
-                  <div>
-                    <p>Behaviour</p>
-                    <h2>Session recordings</h2>
-                    <p className="settings-note">
-                      Heatmaps count every visit. Full recordings keep about 1 in 20
-                      sessions, plus rage-clicks.
-                    </p>
-                  </div>
-                  <span>
-                    {activeCount} active · {sessions.length} in {timePreset} · live poll
-                    on this tab
-                  </span>
-                </div>
-                <section className="live-toolbar recordings-toolbar">
-                  <div className="mode-switch" aria-label="Time range">
-                    {TIME_PRESETS.map((preset) => (
-                      <button
-                        key={preset.id}
-                        data-active={timePreset === preset.id}
-                        onClick={() => setTimePreset(preset.id)}
-                        type="button"
-                      >
-                        {preset.label}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="device-switch" aria-label="Device">
-                    <button
-                      data-active={device === "all"}
-                      onClick={() => setDevice("all")}
-                      type="button"
-                    >
-                      All
-                    </button>
-                    <button
-                      data-active={device === "desktop"}
-                      onClick={() => setDevice("desktop")}
-                      type="button"
-                    >
-                      <Monitor size={16} />
-                    </button>
-                    <button
-                      data-active={device === "mobile"}
-                      onClick={() => setDevice("mobile")}
-                      type="button"
-                    >
-                      <DeviceMobile size={16} />
-                    </button>
-                  </div>
-                  <label className="route-search">
-                    Route
-                    <input
-                      onChange={(event) => setSessionQuery(event.target.value)}
-                      placeholder="/products…"
-                      type="search"
-                      value={sessionQuery}
-                    />
-                  </label>
-                  <label className="bot-toggle">
-                    <input
-                      checked={hideBots}
-                      onChange={(event) => setHideBots(event.target.checked)}
-                      type="checkbox"
-                    />
-                    Hide bots
-                  </label>
-                </section>
-                <div className="page-chips" aria-label="Page">
-                  <button
-                    data-active={pageFilter === "all"}
-                    onClick={() => setPageFilter("all")}
-                    type="button"
-                  >
-                    All
-                  </button>
-                  <button
-                    data-active={pageFilter === "home"}
-                    onClick={() => setPageFilter("home")}
-                    type="button"
-                  >
-                    Home
-                  </button>
-                  {recordingPages.rest.map((route) => (
-                    <button
-                      data-active={pageFilter === route}
-                      key={route}
-                      onClick={() => setPageFilter(route)}
-                      title={route}
-                      type="button"
-                    >
-                      {displayRouteLabel(route)}
-                    </button>
-                  ))}
-                </div>
-                {recordingSessions.length === 0 ? (
-                  <p className="site-map-status">
-                    {pageFilter === "home"
-                      ? "No homepage recordings in this range."
-                      : "No recordings match this page."}
-                  </p>
-                ) : (
-                  <SessionRows sessions={recordingSessions} onOpen={openReplay} />
-                )}
-              </section>
-            </div>
-          ))}
+        {surface === "store" && !selectedRoute ? (
+          <div className="store-stage">
+            {mapLoading && !routeIndex ? (
+              <p className="site-map-status">Opening the store…</p>
+            ) : routeIndex && routeIndex.routes.length === 0 && !demo ? (
+              <EmptySessions onRefresh={refresh} />
+            ) : (
+              <StoreFloor
+                demo={demo}
+                heatmaps={miniHeatmaps}
+                journey={journey}
+                onOpenPage={openPage}
+                onUseSample={() => setDemo(true)}
+                onWatch={openWatch}
+                recs={recs}
+                routes={routeIndex?.routes ?? []}
+              />
+            )}
+          </div>
+        ) : null}
+
+        {watchOpen ? (
+          <aside className="watch-drawer" aria-label="Recordings">
+            <header>
+              <div>
+                <p>Recordings</p>
+                <h2>
+                  {selectedRoute ? displayRouteLabel(selectedRoute) : "This range"}
+                </h2>
+              </div>
+              <button
+                className="icon-button"
+                onClick={() => setWatchOpen(false)}
+                type="button"
+              >
+                ×
+              </button>
+            </header>
+            <p className="settings-note">
+              Heatmaps count every visit. Full recordings keep about 1 in 20, plus
+              rage-clicks.
+            </p>
+            <label className="bot-toggle">
+              <input
+                checked={hideBots}
+                onChange={(event) => setHideBots(event.target.checked)}
+                type="checkbox"
+              />
+              Hide bots
+            </label>
+            {pageSessions.length === 0 ? (
+              <p className="site-map-status">No playable recordings here yet.</p>
+            ) : (
+              <SessionRows sessions={pageSessions} onOpen={openReplay} />
+            )}
+          </aside>
+        ) : null}
       </main>
       {replayOpen && (
         <ReplayViewer
