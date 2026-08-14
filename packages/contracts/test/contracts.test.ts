@@ -210,6 +210,6 @@ describe("plans", () => {
   it("keeps the $19 Launch plan under Clarity-adjacent SMB money", () => {
     expect(PLAN_CATALOG.free.monthlySessions).toBe(1_000);
     expect(PLAN_CATALOG.launch.priceUsd).toBe(19);
-    expect(PLAN_CATALOG.growth.monthlySessions).toBe(50_000);
+    expect(PLAN_CATALOG.growth.monthlySessions).toBe(1_000_000);
   });
 });

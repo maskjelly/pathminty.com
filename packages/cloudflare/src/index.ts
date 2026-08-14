@@ -12,7 +12,9 @@ export {
 } from "./capture-proxy";
 
 import type {
+  AggregateInboxItem,
   CheckoutIndex,
+  DailyShopAggregate,
   OrderFact,
   ReplayBatch,
   SessionCompletedJob,
@@ -20,13 +22,18 @@ import type {
   ShopifyPixelEvent,
 } from "@pathminty/contracts";
 import {
+  AggregateInboxItemSchema,
   CheckoutIndexSchema,
+  DailyShopAggregateSchema,
   OrderFactSchema,
   ReplayBatchSchema,
   SessionSummarySchema,
 } from "@pathminty/contracts";
 import {
+  aggregateDayPrefix,
+  aggregateInboxKey,
   checkoutIndexKey,
+  dailyAggregateKey,
   orderFactKey,
   orderFactPrefix,
   replayChunkKey,
@@ -235,6 +242,70 @@ export class R2ReplayObjectStore implements ReplayObjectStore {
     const parsed = CheckoutIndexSchema.safeParse(await object.json<unknown>());
     if (!parsed.success) throw new Error("Stored checkout index is invalid");
     return parsed.data;
+  }
+
+  async deleteSessionChunks(shopId: string, sessionId: string): Promise<number> {
+    const chunks = await this.listChunks(shopId, sessionId);
+    if (chunks.length === 0) return 0;
+    await Promise.all(chunks.map((chunk) => this.bucket.delete(chunk.key)));
+    return chunks.length;
+  }
+
+  async putAggregateInbox(item: AggregateInboxItem): Promise<void> {
+    await this.bucket.put(
+      aggregateInboxKey(item.shopId, item.day, item.id),
+      JSON.stringify(item),
+      { httpMetadata: { contentType: "application/json" } },
+    );
+  }
+
+  async listAggregateInbox(
+    shopId: string,
+    day: string,
+    limit = 80,
+  ): Promise<AggregateInboxItem[]> {
+    const prefix = `${aggregateDayPrefix(shopId, day)}inbox/`;
+    const page = await this.bucket.list({
+      prefix,
+      limit: Math.min(Math.max(limit, 1), 200),
+    });
+    const items = await Promise.all(
+      page.objects.map(async (object) => {
+        const body = await this.bucket.get(object.key);
+        if (!body) return null;
+        const parsed = AggregateInboxItemSchema.safeParse(await body.json<unknown>());
+        return parsed.success ? parsed.data : null;
+      }),
+    );
+    return items.filter((item): item is AggregateInboxItem => item !== null);
+  }
+
+  async deleteAggregateInbox(
+    shopId: string,
+    day: string,
+    ids: readonly string[],
+  ): Promise<void> {
+    await Promise.all(
+      ids.map((id) => this.bucket.delete(aggregateInboxKey(shopId, day, id))),
+    );
+  }
+
+  async getDailyAggregate(
+    shopId: string,
+    day: string,
+  ): Promise<DailyShopAggregate | null> {
+    const object = await this.bucket.get(dailyAggregateKey(shopId, day));
+    if (!object) return null;
+    const parsed = DailyShopAggregateSchema.safeParse(await object.json<unknown>());
+    return parsed.success ? parsed.data : null;
+  }
+
+  async putDailyAggregate(aggregate: DailyShopAggregate): Promise<void> {
+    await this.bucket.put(
+      dailyAggregateKey(aggregate.shopId, aggregate.day),
+      JSON.stringify(aggregate),
+      { httpMetadata: { contentType: "application/json" } },
+    );
   }
 
   async deleteShopObjects(shopId: string): Promise<number> {

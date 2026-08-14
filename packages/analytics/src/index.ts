@@ -344,7 +344,7 @@ export function pickSnapshotCandidates(
     .slice(0, Math.max(1, limit));
 }
 
-function pinHomeRoutes<T extends { route: string }>(
+export function pinHomeRoutes<T extends { route: string }>(
   sorted: readonly T[],
   limit: number,
 ): T[] {
@@ -1633,6 +1633,21 @@ export function buildHeatmap(input: {
     status,
   };
 }
+
+export {
+  activityFromAggregate,
+  applyInboxToDaily,
+  buildAggregateInboxItem,
+  compactDailyAggregate,
+  emptyDailyAggregate,
+  heatmapFromAggregate,
+  journeyFromAggregate,
+  mergeDailyAggregates,
+  routeIndexFromAggregate,
+  shouldKeepReplay,
+  utcDayKeys,
+  REPLAY_SAMPLE_EVERY,
+} from "./aggregates";
 
 export function dedupeClicks(clicks: readonly HeatmapClick[]): HeatmapClick[] {
   const seen = new Set<string>();

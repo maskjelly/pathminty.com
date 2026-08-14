@@ -1,14 +1,20 @@
 import {
+  activityFromAggregate,
   assessReplayReconstruction,
   buildActivityTimeline,
   buildHeatmap,
   buildJourneyGraph,
   buildRouteIndex,
   extractSnapshotEvents,
+  heatmapFromAggregate,
+  journeyFromAggregate,
+  mergeDailyAggregates,
   pickSnapshotCandidates,
   resolveSessionStatus,
   resolveTimePreset,
+  routeIndexFromAggregate,
   sameStorefrontRoute,
+  utcDayKeys,
 } from "@pathminty/analytics";
 import { R2ReplayObjectStore } from "@pathminty/cloudflare";
 import {
@@ -131,6 +137,19 @@ app.use("/v1/shops/*", async (context, next) => {
 function createSessionId() {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+async function loadMergedAggregate(
+  store: R2ReplayObjectStore,
+  shopId: string,
+  fromMs: number,
+  toMs: number,
+) {
+  const days = utcDayKeys(fromMs, toMs);
+  const loaded = await Promise.all(
+    days.map((day) => store.getDailyAggregate(shopId, day)),
+  );
+  return mergeDailyAggregates(loaded.filter((row) => row !== null));
 }
 
 function refreshSessionStatus(summary: SessionSummary): SessionSummary {
@@ -302,12 +321,30 @@ app.get("/v1/shops/:shopId/sessions", async (context) => {
   const device = parseDevice(context.req.query("device") ?? undefined);
   if (!device) return context.json({ error: "Invalid device" }, 400);
 
-  const sessions = (
-    await loadShopSessions(context.env.REPLAY_BUCKET, shop.data, {
+  const objectStore = new R2ReplayObjectStore(context.env.REPLAY_BUCKET);
+  const merged = await loadMergedAggregate(
+    objectStore,
+    shop.data,
+    window.fromMs,
+    window.toMs,
+  );
+  let listed =
+    merged && merged.recentReplayIds.length > 0
+      ? (
+          await Promise.all(
+            merged.recentReplayIds.map((sessionId) =>
+              objectStore.getSessionSummary(shop.data, sessionId),
+            ),
+          )
+        ).filter((row): row is SessionSummary => row !== null)
+      : [];
+  if (listed.length === 0) {
+    listed = await loadShopSessions(context.env.REPLAY_BUCKET, shop.data, {
       includeTest,
       limit: 100,
-    })
-  ).filter((session) => {
+    });
+  }
+  const sessions = listed.filter((session) => {
     if (device !== "all" && session.device !== device) return false;
     const started = Date.parse(session.startedAt);
     const lastSeen = Date.parse(session.lastSeenAt);
@@ -359,6 +396,27 @@ app.get("/v1/shops/:shopId/routes", async (context) => {
   const limit = Number.isInteger(rawLimit) ? Math.min(Math.max(rawLimit, 1), 48) : 24;
   const query = context.req.query("q") ?? "";
 
+  const objectStore = new R2ReplayObjectStore(context.env.REPLAY_BUCKET);
+  const merged = await loadMergedAggregate(
+    objectStore,
+    shop.data,
+    window.fromMs,
+    window.toMs,
+  );
+  if (merged && merged.totalSessions > 0) {
+    return context.json(
+      routeIndexFromAggregate({
+        aggregate: merged,
+        device,
+        mode: mode.data,
+        sort: sort.data,
+        limit,
+        query,
+        fromIso: new Date(window.fromMs).toISOString(),
+        toIso: new Date(window.toMs).toISOString(),
+      }),
+    );
+  }
   const sessions = await loadShopSessions(context.env.REPLAY_BUCKET, shop.data, {
     limit: 100,
   });
@@ -396,6 +454,22 @@ app.get("/v1/shops/:shopId/activity", async (context) => {
     return context.json({ error: "Invalid route" }, 400);
   }
 
+  const objectStore = new R2ReplayObjectStore(context.env.REPLAY_BUCKET);
+  const merged = await loadMergedAggregate(
+    objectStore,
+    shop.data,
+    window.fromMs,
+    window.toMs,
+  );
+  if (merged && merged.totalSessions > 0) {
+    return context.json(
+      activityFromAggregate({
+        aggregate: merged,
+        fromMs: window.fromMs,
+        toMs: window.toMs,
+      }),
+    );
+  }
   const sessions = await loadShopSessions(context.env.REPLAY_BUCKET, shop.data, {
     limit: 100,
   });
@@ -521,16 +595,31 @@ app.get("/v1/shops/:shopId/heatmaps", async (context) => {
     ? await resolveSnapshotEvents(objectStore, shop.data, route, device, sessions)
     : null;
 
-  const heatmap = buildHeatmap({
-    shopId: shop.data,
-    route,
-    device,
-    mode: mode.data,
-    sessions,
-    snapshotEvents,
-    fromMs,
-    toMs,
-  });
+  const merged = await loadMergedAggregate(objectStore, shop.data, fromMs, toMs);
+  const heatmap =
+    merged && merged.totalSessions > 0
+      ? heatmapFromAggregate({
+          shopId: shop.data,
+          route,
+          device,
+          mode: mode.data,
+          aggregate: merged,
+          snapshotEvents,
+          fromIso: new Date(fromMs).toISOString(),
+          toIso: new Date(toMs).toISOString(),
+          viewport: sessions[0]?.viewport ?? null,
+          document: sessions[0]?.document ?? null,
+        })
+      : buildHeatmap({
+          shopId: shop.data,
+          route,
+          device,
+          mode: mode.data,
+          sessions,
+          snapshotEvents,
+          fromMs,
+          toMs,
+        });
 
   return context.json(heatmap);
 });
@@ -579,6 +668,12 @@ app.get("/v1/shops/:shopId/heatmaps/batch", async (context) => {
     limit: 100,
   });
   const objectStore = new R2ReplayObjectStore(context.env.REPLAY_BUCKET);
+  const merged = await loadMergedAggregate(
+    objectStore,
+    shop.data,
+    window.fromMs,
+    window.toMs,
+  );
 
   const heatmaps = await Promise.all(
     routes.map(async (route, index) => {
@@ -586,6 +681,20 @@ app.get("/v1/shops/:shopId/heatmaps/batch", async (context) => {
       const snapshotEvents = wantSnapshot
         ? await resolveSnapshotEvents(objectStore, shop.data, route, device, sessions)
         : null;
+      if (merged && merged.totalSessions > 0) {
+        return heatmapFromAggregate({
+          shopId: shop.data,
+          route,
+          device,
+          mode: mode.data,
+          aggregate: merged,
+          snapshotEvents,
+          fromIso: new Date(window.fromMs).toISOString(),
+          toIso: new Date(window.toMs).toISOString(),
+          viewport: sessions[0]?.viewport ?? null,
+          document: sessions[0]?.document ?? null,
+        });
+      }
       return buildHeatmap({
         shopId: shop.data,
         route,
@@ -618,6 +727,24 @@ app.get("/v1/shops/:shopId/journeys", async (context) => {
   const rawMax = Number(context.req.query("maxNodes") ?? "24");
   const maxNodes = Number.isInteger(rawMax) ? Math.min(Math.max(rawMax, 4), 48) : 24;
 
+  const objectStore = new R2ReplayObjectStore(context.env.REPLAY_BUCKET);
+  const merged = await loadMergedAggregate(
+    objectStore,
+    shop.data,
+    window.fromMs,
+    window.toMs,
+  );
+  if (merged && merged.totalSessions > 0) {
+    return context.json(
+      journeyFromAggregate({
+        aggregate: merged,
+        device,
+        maxNodes,
+        fromIso: new Date(window.fromMs).toISOString(),
+        toIso: new Date(window.toMs).toISOString(),
+      }),
+    );
+  }
   const sessions = await loadShopSessions(context.env.REPLAY_BUCKET, shop.data, {
     limit: 100,
   });

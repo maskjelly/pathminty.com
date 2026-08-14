@@ -246,6 +246,8 @@ export const SessionSummarySchema = z
     scrolls: z.array(HeatmapHoverSchema).max(400).optional(),
     /** First-touch acquisition for this session. */
     acquisition: AcquisitionSchema.optional(),
+    /** False when this session was counted in heatmaps but full replay was sampled out. */
+    keptReplay: z.boolean().optional(),
   })
   .strict();
 
@@ -321,14 +323,14 @@ export const PLAN_CATALOG = {
     id: "growth" as const,
     name: "Growth",
     priceUsd: 49,
-    monthlySessions: 50_000,
+    monthlySessions: 1_000_000,
     retentionDays: 60,
     headline: "For stores that cannot guess",
     features: [
       "Everything in Launch",
-      "50,000 human sessions / month",
-      "Whole team via Shopify Admin",
-      "Priority capture diagnostics",
+      "1,000,000 human sessions / month",
+      "All-traffic heatmaps (not a 100-session sample)",
+      "Sampled full recordings + rage-click keeps",
       "60-day replay storage",
     ],
   },
@@ -503,6 +505,146 @@ export const HeatmapBatchResponseSchema = z
   .strict();
 
 export type HeatmapBatchResponse = z.infer<typeof HeatmapBatchResponseSchema>;
+
+const AggregateCellSchema = z.object({
+  x: z.number().min(0).max(1),
+  y: z.number().min(0).max(1),
+  weight: z.number().positive().max(1_000_000_000_000),
+});
+
+const DeviceCountSchema = z
+  .object({
+    desktop: z.number().int().nonnegative(),
+    tablet: z.number().int().nonnegative(),
+    mobile: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export const RouteDayAggregateSchema = z
+  .object({
+    sessionCount: z.number().int().nonnegative(),
+    clickCount: z.number().int().nonnegative(),
+    hoverWeight: z.number().int().nonnegative(),
+    clickCells: z.array(AggregateCellSchema).max(256),
+    hoverCells: z.array(AggregateCellSchema).max(256),
+    clickCellsByDevice: z
+      .object({
+        desktop: z.array(AggregateCellSchema).max(256),
+        tablet: z.array(AggregateCellSchema).max(256),
+        mobile: z.array(AggregateCellSchema).max(256),
+      })
+      .strict(),
+    hoverCellsByDevice: z
+      .object({
+        desktop: z.array(AggregateCellSchema).max(256),
+        tablet: z.array(AggregateCellSchema).max(256),
+        mobile: z.array(AggregateCellSchema).max(256),
+      })
+      .strict(),
+    sessionsByDevice: DeviceCountSchema,
+    checkoutReachCount: z.number().int().nonnegative(),
+    hasFullSnapshot: z.boolean(),
+    lastSeenAt: z.string().datetime({ offset: true }),
+  })
+  .strict();
+
+export type RouteDayAggregate = z.infer<typeof RouteDayAggregateSchema>;
+
+export const DailyShopAggregateSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    shopId: ShopIdSchema,
+    day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u),
+    totalSessions: z.number().int().nonnegative(),
+    checkoutSessions: z.number().int().nonnegative(),
+    routes: z.record(z.string(), RouteDayAggregateSchema),
+    edges: z.record(z.string(), z.number().int().nonnegative()),
+    acquisitions: z.record(
+      z.string(),
+      z
+        .object({
+          source: z.string().min(1).max(80),
+          medium: z.string().min(1).max(80).nullable(),
+          campaign: z.string().min(1).max(80).nullable(),
+          referrerHost: z.string().min(1).max(255).nullable(),
+          landingRoute: z.string().min(1).max(2_048),
+          sessionCount: z.number().int().nonnegative(),
+        })
+        .strict(),
+    ),
+    hourSessions: z.array(z.number().int().nonnegative()).length(24),
+    seenSessionIds: z.array(z.string()).max(80_000),
+    recentReplayIds: z.array(z.string()).max(80),
+    appliedInboxIds: z.array(z.string()).max(4_000),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .strict();
+
+export type DailyShopAggregate = z.infer<typeof DailyShopAggregateSchema>;
+
+export const AggregateInboxItemSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    id: z.string().min(8).max(80),
+    shopId: ShopIdSchema,
+    sessionId: UuidSchema,
+    day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/u),
+    hour: z.number().int().min(0).max(23),
+    device: z.enum(["desktop", "tablet", "mobile"]),
+    isNewSession: z.boolean(),
+    newRoutes: z.array(z.string().min(1).max(2_048)).max(64),
+    newEdges: z
+      .array(
+        z
+          .object({
+            from: z.string().min(1).max(2_048),
+            to: z.string().min(1).max(2_048),
+          })
+          .strict(),
+      )
+      .max(64),
+    clicks: z
+      .array(
+        z
+          .object({
+            route: z.string().min(1).max(2_048),
+            x: z.number().min(0).max(1),
+            y: z.number().min(0).max(1),
+            weight: z.number().positive(),
+          })
+          .strict(),
+      )
+      .max(2_000),
+    hovers: z
+      .array(
+        z
+          .object({
+            route: z.string().min(1).max(2_048),
+            x: z.number().min(0).max(1),
+            y: z.number().min(0).max(1),
+            weight: z.number().positive(),
+          })
+          .strict(),
+      )
+      .max(2_000),
+    reachedCheckout: z.boolean(),
+    acquisition: z
+      .object({
+        source: z.string().min(1).max(80),
+        medium: z.string().min(1).max(80).nullable(),
+        campaign: z.string().min(1).max(80).nullable(),
+        referrerHost: z.string().min(1).max(255).nullable(),
+        landingRoute: z.string().min(1).max(2_048),
+      })
+      .strict()
+      .nullable(),
+    hasFullSnapshot: z.boolean(),
+    keepReplay: z.boolean(),
+    lastSeenAt: z.string().datetime({ offset: true }),
+  })
+  .strict();
+
+export type AggregateInboxItem = z.infer<typeof AggregateInboxItemSchema>;
 
 /** Journey / flow graph built from session route sequences. */
 export const JourneyNodeSchema = z

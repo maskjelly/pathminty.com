@@ -1,5 +1,7 @@
 import type {
+  AggregateInboxItem,
   CheckoutIndex,
+  DailyShopAggregate,
   OrderFact,
   ReplayBatch,
   SessionCompletedJob,
@@ -44,6 +46,20 @@ export interface ReplayObjectStore {
     checkoutToken: string,
   ): Promise<CheckoutIndex | null>;
   deleteShopObjects(shopId: string): Promise<number>;
+  deleteSessionChunks(shopId: string, sessionId: string): Promise<number>;
+  putAggregateInbox(item: AggregateInboxItem): Promise<void>;
+  listAggregateInbox(
+    shopId: string,
+    day: string,
+    limit?: number,
+  ): Promise<AggregateInboxItem[]>;
+  deleteAggregateInbox(
+    shopId: string,
+    day: string,
+    ids: readonly string[],
+  ): Promise<void>;
+  getDailyAggregate(shopId: string, day: string): Promise<DailyShopAggregate | null>;
+  putDailyAggregate(aggregate: DailyShopAggregate): Promise<void>;
 }
 
 export interface SessionJobPublisher {
@@ -109,5 +125,26 @@ export function shopObjectPrefixes(shopId: string): readonly string[] {
     `shopify-events/v1/${shopId}/`,
     orderFactPrefix(shopId),
     `checkout-index/v1/${shopId}/`,
+    aggregateShopPrefix(shopId),
   ];
+}
+
+export function aggregateShopPrefix(shopId: string): string {
+  return `aggregates/v1/${shopId}/`;
+}
+
+export function aggregateDayPrefix(shopId: string, day: string): string {
+  return `${aggregateShopPrefix(shopId)}${day}/`;
+}
+
+export function dailyAggregateKey(shopId: string, day: string): string {
+  return `${aggregateDayPrefix(shopId, day)}daily.json`;
+}
+
+export function aggregateInboxKey(
+  shopId: string,
+  day: string,
+  inboxId: string,
+): string {
+  return `${aggregateDayPrefix(shopId, day)}inbox/${inboxId}.json`;
 }

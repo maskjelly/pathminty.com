@@ -849,6 +849,10 @@ export function LiveDashboard() {
                   <div>
                     <p>Behaviour</p>
                     <h2>Session recordings</h2>
+                    <p className="settings-note">
+                      Heatmaps count every visit. Full recordings keep about 1 in 20
+                      sessions, plus rage-clicks.
+                    </p>
                   </div>
                   <span>
                     {activeCount} active · {sessions.length} in {timePreset} · live poll

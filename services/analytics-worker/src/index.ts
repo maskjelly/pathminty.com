@@ -2,8 +2,12 @@ import {
   applyShopifyRefundToOrder,
   assessReplayReconstruction,
   attachOrderToSession,
+  buildAggregateInboxItem,
+  compactDailyAggregate,
+  emptyDailyAggregate,
   findSessionForOrder,
   parseShopifyOrderPayload,
+  shouldKeepReplay,
   summarizeReplayBatches,
 } from "@pathminty/analytics";
 import { R2ReplayObjectStore } from "@pathminty/cloudflare";
@@ -32,6 +36,34 @@ type AnalyticsEnv = Cloudflare.Env & {
 
 function isShopifyWebhooksQueue(queueName: string) {
   return queueName.includes("shopify-webhooks");
+}
+
+async function compactShopDay(
+  objectStore: R2ReplayObjectStore,
+  kv: KVNamespace,
+  shopId: string,
+  day: string,
+) {
+  const lockKey = `agg-lock:${shopId}:${day}`;
+  const locked = await kv.get(lockKey);
+  if (locked) return;
+  await kv.put(lockKey, "1", { expirationTtl: 45 });
+  try {
+    const inbox = await objectStore.listAggregateInbox(shopId, day, 80);
+    if (inbox.length === 0) return;
+    const existing =
+      (await objectStore.getDailyAggregate(shopId, day)) ??
+      emptyDailyAggregate(shopId, day);
+    const next = compactDailyAggregate(existing, inbox);
+    await objectStore.putDailyAggregate(next);
+    await objectStore.deleteAggregateInbox(
+      shopId,
+      day,
+      inbox.map((item) => item.id),
+    );
+  } finally {
+    await kv.delete(lockKey);
+  }
 }
 
 async function processSessionJob(
@@ -68,6 +100,11 @@ async function processSessionJob(
       completedAt: result.data.enqueuedAt,
     });
 
+    const existing = await objectStore.getSessionSummary(
+      result.data.shopId,
+      result.data.sessionId,
+    );
+
     const replayBatches = await objectStore.getBatches(
       result.data.shopId,
       result.data.sessionId,
@@ -87,10 +124,6 @@ async function processSessionJob(
     });
 
     // Preserve order attribution if a prior commerce join already wrote revenue.
-    const existing = await objectStore.getSessionSummary(
-      result.data.shopId,
-      result.data.sessionId,
-    );
     if (existing?.orderId) {
       summary = {
         ...summary,
@@ -107,7 +140,30 @@ async function processSessionJob(
       summary = { ...summary, acquisition: existing.acquisition };
     }
 
+    const keepReplay =
+      existing?.keptReplay === true ||
+      shouldKeepReplay(summary.sessionId, summary.rageClickCount ?? 0);
+    summary = { ...summary, keptReplay: keepReplay };
+
     await objectStore.putSessionSummary(summary);
+
+    const inbox = buildAggregateInboxItem({
+      id: result.data.jobId,
+      previous: existing,
+      next: summary,
+      keepReplay,
+    });
+    await objectStore.putAggregateInbox(inbox);
+    await compactShopDay(
+      objectStore,
+      env.SHOPIFY_INSTALLATIONS,
+      inbox.shopId,
+      inbox.day,
+    );
+
+    if (result.data.isFinal && !keepReplay) {
+      await objectStore.deleteSessionChunks(result.data.shopId, result.data.sessionId);
+    }
 
     const quality = summary.quality ?? "human";
     await recordBillableSession(env.SHOPIFY_INSTALLATIONS, result.data.shopId, {
