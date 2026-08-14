@@ -1763,7 +1763,7 @@ body {
 /* —— Insights concept —— */
 .insights {
   padding: 16px 20px 48px;
-  max-width: 1180px;
+  max-width: 1280px;
 }
 .insights-demo-banner {
   margin: 0 0 12px;
@@ -1812,135 +1812,153 @@ body {
   border-color: var(--green);
   background: var(--green);
 }
-.insights-grid {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 280px;
-  gap: 12px;
-}
-.insights-card {
-  padding: 16px;
+.funnel-board {
+  padding: 20px 20px 16px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-elevated);
+  border-radius: 12px;
+  background: #0e1014;
 }
-.insights-funnel-steps {
+.funnel-stage-row,
+.funnel-drop-row {
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
   gap: 8px;
 }
-.insights-step {
+.funnel-stage {
   display: grid;
+  justify-items: center;
   gap: 4px;
+  text-align: center;
+}
+.funnel-stage-icon {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: #c4b5fd;
+  background: #1a1730;
+}
+.funnel-stage strong {
   color: var(--text-secondary);
-  font-size: 11px;
-}
-.insights-step strong {
-  color: var(--text);
   font-size: 12px;
+  font-weight: 600;
 }
-.insights-step b {
+.funnel-stage b {
   color: var(--text);
-  font-size: 18px;
+  font-size: 20px;
+  letter-spacing: -0.4px;
 }
-.insights-funnel-viz {
-  display: flex;
-  align-items: flex-end;
-  gap: 10px;
-  height: 140px;
-  margin: 18px 0 12px;
-}
-.insights-funnel-viz i {
-  flex: 1;
-  border-radius: 6px 6px 0 0;
-  background: linear-gradient(180deg, #7c6af7, #3b2ea8);
-}
-.insights-funnel-rates {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 8px;
-}
-.insights-funnel-rates em {
+.funnel-svg {
   display: block;
-  color: var(--text);
-  font-size: 14px;
-  font-style: normal;
-  font-weight: 700;
+  width: 100%;
+  height: 200px;
+  margin: 8px 0 14px;
 }
-.insights-funnel-rates small {
-  color: var(--red);
+.funnel-drop {
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  padding: 8px 6px;
+  border-radius: 8px;
+  color: #fecaca;
+  background: #2a1214;
+  text-align: center;
   font-size: 11px;
 }
-.insights-side {
-  display: grid;
-  gap: 12px;
-  align-content: start;
+.funnel-drop strong {
+  color: #fecaca;
+  font-size: 14px;
 }
-.insights-kpi,
-.insights-recs {
+.funnel-drop.is-quiet {
+  color: var(--text-muted);
+  background: #16181c;
+}
+.funnel-legend {
+  margin: 12px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+.funnel-empty {
+  margin: 24px 0;
+  color: var(--text-secondary);
+  text-align: center;
+}
+.funnel-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+.funnel-kpis article {
   padding: 14px;
   border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--bg-elevated);
+  border-radius: 10px;
+  background: #0e1014;
 }
-.insights-kpi p,
-.insights-recs > p {
-  display: flex;
-  align-items: center;
-  gap: 6px;
+.funnel-kpis p {
   margin: 0 0 6px;
   color: var(--text-secondary);
   font-size: 12px;
 }
-.insights-kpi strong {
+.funnel-kpis strong {
   display: block;
-  font-size: 22px;
+  font-size: 26px;
+  letter-spacing: -0.6px;
 }
-.insights-kpi small {
+.funnel-kpis small {
   color: var(--text-muted);
   font-size: 11px;
 }
-.insights-recs {
-  display: grid;
-  gap: 10px;
+.funnel-recs {
+  margin-top: 4px;
 }
-.insights-recs article {
-  display: grid;
+.funnel-recs h3,
+.funnel-board h3 {
+  display: flex;
+  align-items: center;
   gap: 6px;
-}
-.insights-recs article[data-impact="high"] b {
-  color: #fb923c;
-}
-.insights-recs span {
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.4;
-}
-.insights-kpis {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-  margin-bottom: 16px;
-}
-.insights-kpis article {
-  padding: 10px;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-}
-.insights-kpis p {
-  margin: 0 0 4px;
-  color: var(--text-secondary);
-  font-size: 11px;
-}
-.insights-kpis strong {
-  font-size: 20px;
-}
-.insights-kpis small {
-  color: var(--text-muted);
-  font-size: 11px;
-}
-.insights-card h3 {
-  margin: 0 0 8px;
+  margin: 0 0 10px;
   font-size: 14px;
+}
+.funnel-rec-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.funnel-rec-grid article {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #0e1014;
+}
+.funnel-rec-grid em {
+  color: #fdba74;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.funnel-rec-grid article[data-impact="medium"] em {
+  color: #93c5fd;
+}
+.funnel-rec-grid b {
+  font-size: 14px;
+}
+.funnel-rec-grid span {
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+.merch-tables {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 12px;
 }
 .insights-table {
   width: 100%;
@@ -1949,7 +1967,7 @@ body {
 }
 .insights-table th,
 .insights-table td {
-  padding: 8px 6px;
+  padding: 10px 8px;
   border-bottom: 1px solid var(--border);
   text-align: left;
 }
@@ -1961,20 +1979,25 @@ body {
 .insights-link {
   padding: 0;
   border: 0;
-  color: var(--blue);
+  color: #a5b4fc;
   background: none;
   font: inherit;
   cursor: pointer;
 }
+.insights-link:disabled {
+  color: var(--text);
+  cursor: default;
+}
 @media (max-width: 900px) {
-  .insights-grid,
-  .insights-kpis,
-  .insights-funnel-steps,
-  .insights-funnel-rates {
+  .funnel-kpis,
+  .funnel-rec-grid,
+  .merch-tables,
+  .funnel-stage-row,
+  .funnel-drop-row {
     grid-template-columns: 1fr;
   }
-  .insights-funnel-viz {
-    height: 80px;
+  .funnel-svg {
+    height: 140px;
   }
 }
 

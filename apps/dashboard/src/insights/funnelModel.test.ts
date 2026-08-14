@@ -102,7 +102,7 @@ describe("funnel concept model", () => {
   it("ships a Heavenly-scale sample funnel for brand pitches", () => {
     const demo = buildDemoFunnelSteps();
     expect(demo.map((step) => step.sessions)).toEqual([
-      125_430, 53_620, 23_410, 8_945, 5_234,
+      125_430, 53_620, 23_410, 8_945, 5_234, 3_342,
     ]);
     expect(demo[1]?.fromPrevious).toBeCloseTo(0.427, 2);
   });

@@ -2,7 +2,8 @@ import type { JourneyGraphResponse, RouteStat } from "@pathminty/contracts";
 
 import { classifyRoute } from "../siteCanvasLayout";
 
-export type FunnelStepId = "home" | "browse" | "product" | "cart" | "checkout";
+export type FunnelStepId =
+  "home" | "browse" | "product" | "cart" | "checkout" | "purchase";
 
 export type FunnelStep = {
   id: FunnelStepId;
@@ -32,9 +33,9 @@ export type ProductInsight = {
 
 const STEP_META: Array<{ id: FunnelStepId; label: string }> = [
   { id: "home", label: "Landing" },
-  { id: "browse", label: "Browse" },
+  { id: "browse", label: "Collection" },
   { id: "product", label: "Product" },
-  { id: "cart", label: "Cart" },
+  { id: "cart", label: "Add to cart" },
   { id: "checkout", label: "Checkout" },
 ];
 
@@ -68,7 +69,7 @@ export function buildFunnelSteps(
     byStep.set(step, Math.max(byStep.get(step) ?? 0, 0) + row.sessionCount);
   }
 
-  return STEP_META.map((meta, index) => {
+  const steps = STEP_META.map((meta, index) => {
     const sessions = byStep.get(meta.id) ?? 0;
     let previous: number | null = null;
     for (let look = index - 1; look >= 0; look -= 1) {
@@ -100,6 +101,25 @@ export function buildFunnelSteps(
       dropOffCount,
     };
   });
+
+  const purchases = journey?.orderCount ?? 0;
+  if (purchases > 0) {
+    const checkoutSessions = byStep.get("checkout") ?? 0;
+    const previous = checkoutSessions > 0 ? checkoutSessions : null;
+    const fromPrevious =
+      previous && previous > 0 ? Math.min(1, purchases / previous) : null;
+    steps.push({
+      id: "purchase",
+      label: "Purchase",
+      sessions: purchases,
+      fromPrevious,
+      dropOff: fromPrevious === null ? null : Math.max(0, 1 - fromPrevious),
+      dropOffCount:
+        previous && previous > purchases ? previous - purchases : previous ? 0 : null,
+    });
+  }
+
+  return steps;
 }
 
 export function buildProductInsights(
@@ -181,26 +201,29 @@ export function formatPct(value: number | null): string {
 
 /** Sample brand pitch — not live shop traffic. Numbers match the Heavenly funnel mock. */
 export function buildDemoFunnelSteps(): FunnelStep[] {
-  const counts: Record<FunnelStepId, number> = {
-    home: 125_430,
-    browse: 53_620,
-    product: 23_410,
-    cart: 8_945,
-    checkout: 5_234,
-  };
-  return STEP_META.map((meta, index) => {
-    const sessions = counts[meta.id];
-    const previousId = STEP_META[index - 1]?.id;
-    const previous = previousId ? counts[previousId] : null;
+  const demoMeta: Array<{ id: FunnelStepId; label: string; sessions: number }> = [
+    { id: "home", label: "Landing", sessions: 125_430 },
+    { id: "browse", label: "Collection", sessions: 53_620 },
+    { id: "product", label: "Product", sessions: 23_410 },
+    { id: "cart", label: "Add to cart", sessions: 8_945 },
+    { id: "checkout", label: "Checkout", sessions: 5_234 },
+    { id: "purchase", label: "Purchase", sessions: 3_342 },
+  ];
+  return demoMeta.map((meta, index) => {
+    const previous = index === 0 ? null : (demoMeta[index - 1]?.sessions ?? 0);
     const fromPrevious =
-      index === 0 ? 1 : previous && previous > 0 ? sessions / previous : null;
+      index === 0 ? 1 : previous && previous > 0 ? meta.sessions / previous : null;
     const dropOff = fromPrevious === null ? null : 1 - fromPrevious;
     const dropOffCount =
-      previous && previous > sessions ? previous - sessions : previous ? 0 : null;
+      previous && previous > meta.sessions
+        ? previous - meta.sessions
+        : previous
+          ? 0
+          : null;
     return {
       id: meta.id,
       label: meta.label,
-      sessions,
+      sessions: meta.sessions,
       fromPrevious,
       dropOff,
       dropOffCount,
