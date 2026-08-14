@@ -278,6 +278,7 @@ const HOME_LOCALE_PREFIX =
 
 /** Store homepage, including Shopify Markets locale roots like /en-us. */
 export function isHomeRoute(route: string): boolean {
+  if (typeof route !== "string" || route.length === 0) return false;
   const path = (route.split(/[?#]/u, 1)[0] ?? "/").replace(/\/+$/u, "") || "/";
   const stripped = HOME_LOCALE_ROOT.test(path)
     ? "/"
@@ -290,6 +291,57 @@ export function isHomeRoute(route: string): boolean {
     r === "/pages/home" ||
     r === "/pages/frontpage"
   );
+}
+
+export function sameStorefrontRoute(left: string, right: string): boolean {
+  if (typeof left !== "string" || typeof right !== "string") return false;
+  if (left === right) return true;
+  return isHomeRoute(left) && isHomeRoute(right);
+}
+
+export function sessionTouchesRoute(
+  session: Pick<SessionSummary, "entryRoute" | "routes">,
+  route: string,
+): boolean {
+  if (sameStorefrontRoute(session.entryRoute, route)) return true;
+  return (session.routes ?? []).some((item) => sameStorefrontRoute(item, route));
+}
+
+export const MAX_SNAPSHOT_CANDIDATES = 3;
+
+/** Prefer a short desktop landing session so Home does not scan the whole shop. */
+export function pickSnapshotCandidates(
+  sessions: readonly SessionSummary[],
+  route: string,
+  device: HeatmapResponse["device"],
+  limit = MAX_SNAPSHOT_CANDIDATES,
+): SessionSummary[] {
+  const deviceRank = (value: SessionSummary["device"]) => {
+    if (value === "desktop") return 0;
+    if (value === "tablet") return 1;
+    return 2;
+  };
+  return sessions
+    .filter(
+      (session) =>
+        session.hasFullSnapshot &&
+        sessionTouchesRoute(session, route) &&
+        (device === "all" || session.device === device),
+    )
+    .sort((left, right) => {
+      const leftEntry = sameStorefrontRoute(left.entryRoute, route) ? 0 : 1;
+      const rightEntry = sameStorefrontRoute(right.entryRoute, route) ? 0 : 1;
+      if (leftEntry !== rightEntry) return leftEntry - rightEntry;
+      const leftPages = left.routes?.length ?? 99;
+      const rightPages = right.routes?.length ?? 99;
+      if (leftPages !== rightPages) return leftPages - rightPages;
+      if (device === "all") {
+        const rank = deviceRank(left.device) - deviceRank(right.device);
+        if (rank !== 0) return rank;
+      }
+      return right.viewport.width - left.viewport.width;
+    })
+    .slice(0, Math.max(1, limit));
 }
 
 function pinHomeRoutes<T extends { route: string }>(
@@ -1478,14 +1530,14 @@ export function buildHeatmap(input: {
     ) {
       return false;
     }
-    return session.routes.includes(input.route) || session.entryRoute === input.route;
+    return sessionTouchesRoute(session, input.route);
   });
 
   const rawPoints: { x: number; y: number; weight: number }[] = [];
   for (const session of routeFiltered) {
     if (input.mode === "click") {
       for (const click of session.clicks) {
-        if (click.route !== input.route) continue;
+        if (!sameStorefrontRoute(click.route, input.route)) continue;
         if (!eventInRange(click.at, fromMs, toMs)) continue;
         rawPoints.push({ x: click.x, y: click.y, weight: 1 });
       }
@@ -1495,13 +1547,13 @@ export function buildHeatmap(input: {
         rawPoints.push({ x: 0.5, y: session.maxScrollDepth, weight: 1 });
       }
       for (const sample of samples) {
-        if (sample.route !== input.route) continue;
+        if (!sameStorefrontRoute(sample.route, input.route)) continue;
         if (!eventInRange(sample.at, fromMs, toMs)) continue;
         rawPoints.push({ x: sample.x, y: sample.y, weight: 1 });
       }
     } else {
       for (const hover of session.hovers) {
-        if (hover.route !== input.route) continue;
+        if (!sameStorefrontRoute(hover.route, input.route)) continue;
         if (!eventInRange(hover.at, fromMs, toMs)) continue;
         rawPoints.push({
           x: hover.x,
@@ -1514,8 +1566,9 @@ export function buildHeatmap(input: {
 
   const points = aggregateHeatmapPoints(rawPoints);
   const representative =
-    routeFiltered.find((session) => session.routes.includes(input.route)) ??
-    routeFiltered[0];
+    routeFiltered.find((session) =>
+      (session.routes ?? []).some((item) => sameStorefrontRoute(item, input.route)),
+    ) ?? routeFiltered[0];
   const viewport = representative?.viewport ?? null;
   const document = representative?.document ?? null;
 

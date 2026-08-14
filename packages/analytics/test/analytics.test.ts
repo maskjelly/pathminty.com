@@ -15,7 +15,10 @@ import {
   countRageClicks,
   findSessionForOrder,
   isCheckoutRoute,
+  isHomeRoute,
   normalizeClientToDocument,
+  pickSnapshotCandidates,
+  sameStorefrontRoute,
   normalizeStorefrontRoute,
   orderReplayEvents,
   parseShopifyOrderPayload,
@@ -680,6 +683,52 @@ describe("buildHeatmap", () => {
     expect(heatmap.status).toBe("interactions_without_snapshot");
     expect(heatmap.points.length).toBeGreaterThan(0);
     expect(heatmap.document).toEqual({ width: 390, height: 2_400 });
+  });
+
+  it("treats locale homepage clicks as the same Home page", () => {
+    const summary = summarizeReplayBatches([rrwebBatch({ sequence: 0 })], {
+      isFinal: true,
+    });
+    const home = {
+      ...summary,
+      entryRoute: "/en-us",
+      routes: ["/en-us"],
+      clicks: [{ at: Date.parse(summary.lastSeenAt), route: "/en-us", x: 0.4, y: 0.3 }],
+    };
+    const heatmap = buildHeatmap({
+      shopId,
+      route: "/",
+      device: "all",
+      mode: "click",
+      sessions: [home],
+      snapshotEvents: null,
+    });
+    expect(heatmap.sessionCount).toBe(1);
+    expect(heatmap.points.length).toBeGreaterThan(0);
+  });
+});
+
+describe("home snapshot candidates", () => {
+  it("does not treat missing routes as Home", () => {
+    expect(isHomeRoute("")).toBe(false);
+    expect(sameStorefrontRoute("/", "/en-us")).toBe(true);
+    expect(sameStorefrontRoute("/", "/products/tee")).toBe(false);
+  });
+
+  it("only inspects a few Home landings instead of every session", () => {
+    const base = summarizeReplayBatches([rrwebBatch({ sequence: 0 })], {
+      isFinal: true,
+    });
+    const sessions = Array.from({ length: 20 }, (_, index) => ({
+      ...base,
+      sessionId: `aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaa${String(index).padStart(2, "0")}`,
+      entryRoute: "/",
+      routes: ["/", `/products/item-${index}`],
+      hasFullSnapshot: true,
+    }));
+    const picked = pickSnapshotCandidates(sessions, "/", "all");
+    expect(picked.length).toBeLessThanOrEqual(3);
+    expect(picked.every((session) => session.entryRoute === "/")).toBe(true);
   });
 });
 

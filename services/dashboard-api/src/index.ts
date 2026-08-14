@@ -5,8 +5,10 @@ import {
   buildJourneyGraph,
   buildRouteIndex,
   extractSnapshotEvents,
+  pickSnapshotCandidates,
   resolveSessionStatus,
   resolveTimePreset,
+  sameStorefrontRoute,
 } from "@pathminty/analytics";
 import { R2ReplayObjectStore } from "@pathminty/cloudflare";
 import {
@@ -455,37 +457,16 @@ async function resolveSnapshotEvents(
   device: "all" | "desktop" | "tablet" | "mobile",
   sessions: SessionSummary[],
 ) {
-  const deviceRank = (value: SessionSummary["device"]) => {
-    if (value === "desktop") return 0;
-    if (value === "tablet") return 1;
-    return 2;
-  };
-
-  const candidates = sessions
-    .filter(
-      (session) =>
-        session.hasFullSnapshot &&
-        (session.routes.includes(route) || session.entryRoute === route) &&
-        (device === "all" || session.device === device),
-    )
-    // Prefer laptop/desktop viewports for previews when device filter is "all".
-    .sort((left, right) => {
-      if (device === "all") {
-        const rank = deviceRank(left.device) - deviceRank(right.device);
-        if (rank !== 0) return rank;
-        // Wider viewports first among same device class.
-        return right.viewport.width - left.viewport.width;
-      }
-      return right.viewport.width - left.viewport.width;
-    });
-
+  const candidates = pickSnapshotCandidates(sessions, route, device);
   for (const candidate of candidates) {
     try {
       const batches = await objectStore.getBatches(shopId, candidate.sessionId);
-      const routeBatches = batches.filter((batch) => batch.route === route);
-      const snapshotEvents = extractSnapshotEvents(
-        routeBatches.length > 0 ? routeBatches : batches,
+      const routeBatches = batches.filter((batch) =>
+        sameStorefrontRoute(batch.route, route),
       );
+      const snapshotEvents =
+        extractSnapshotEvents(routeBatches) ??
+        (routeBatches.length === 0 ? extractSnapshotEvents(batches) : null);
       if (snapshotEvents) return snapshotEvents;
     } catch {
       // Skip unreadable sessions; never invent a page preview.
@@ -599,16 +580,13 @@ app.get("/v1/shops/:shopId/heatmaps/batch", async (context) => {
   });
   const objectStore = new R2ReplayObjectStore(context.env.REPLAY_BUCKET);
 
-  const heatmaps = [];
-  for (let index = 0; index < routes.length; index += 1) {
-    const route = routes[index];
-    if (!route) continue;
-    const wantSnapshot = includeSnapshot && index < snapshotLimit;
-    const snapshotEvents = wantSnapshot
-      ? await resolveSnapshotEvents(objectStore, shop.data, route, device, sessions)
-      : null;
-    heatmaps.push(
-      buildHeatmap({
+  const heatmaps = await Promise.all(
+    routes.map(async (route, index) => {
+      const wantSnapshot = includeSnapshot && index < snapshotLimit;
+      const snapshotEvents = wantSnapshot
+        ? await resolveSnapshotEvents(objectStore, shop.data, route, device, sessions)
+        : null;
+      return buildHeatmap({
         shopId: shop.data,
         route,
         device,
@@ -617,9 +595,9 @@ app.get("/v1/shops/:shopId/heatmaps/batch", async (context) => {
         snapshotEvents,
         fromMs: window.fromMs,
         toMs: window.toMs,
-      }),
-    );
-  }
+      });
+    }),
+  );
 
   return context.json({ heatmaps });
 });

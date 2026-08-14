@@ -66,6 +66,41 @@ function parseShopIdResponse(body: unknown) {
   return shopId.data;
 }
 
+function parseHeatmap(body: unknown): HeatmapResponse {
+  const parsed = HeatmapResponseSchema.safeParse(body);
+  if (parsed.success) return parsed.data;
+  if (typeof body === "object" && body !== null) {
+    const stripped = HeatmapResponseSchema.safeParse({
+      ...body,
+      snapshotEvents: null,
+      status:
+        Array.isArray((body as { points?: unknown }).points) &&
+        (body as { points: unknown[] }).points.length > 0
+          ? "interactions_without_snapshot"
+          : "empty",
+    });
+    if (stripped.success) return stripped.data;
+  }
+  throw new Error("Unable to load heatmap.");
+}
+
+function parseHeatmapBatch(body: unknown): HeatmapResponse[] {
+  const parsed = HeatmapBatchResponseSchema.safeParse(body);
+  if (parsed.success) return parsed.data.heatmaps;
+  const raw =
+    typeof body === "object" && body !== null
+      ? (body as { heatmaps?: unknown }).heatmaps
+      : undefined;
+  if (!Array.isArray(raw)) throw new Error("Unable to load site map heatmaps.");
+  return raw.flatMap((item) => {
+    try {
+      return [parseHeatmap(item)];
+    } catch {
+      return [];
+    }
+  });
+}
+
 function timeSearchParams(time: TimeQuery): URLSearchParams {
   const query = new URLSearchParams({ preset: time.preset });
   if (time.from) query.set("from", time.from);
@@ -224,7 +259,7 @@ export async function getHeatmap(
     `/v1/shops/${encodeURIComponent(shopId)}/heatmaps?${query.toString()}`,
   );
   if (!response.ok) throw new Error("Unable to load heatmap.");
-  return HeatmapResponseSchema.parse(await response.json());
+  return parseHeatmap(await response.json());
 }
 
 export async function getHeatmapBatch(
@@ -252,7 +287,7 @@ export async function getHeatmapBatch(
     `/v1/shops/${encodeURIComponent(shopId)}/heatmaps/batch?${query.toString()}`,
   );
   if (!response.ok) throw new Error("Unable to load site map heatmaps.");
-  return HeatmapBatchResponseSchema.parse(await response.json()).heatmaps;
+  return parseHeatmapBatch(await response.json());
 }
 
 export async function getJourneys(
