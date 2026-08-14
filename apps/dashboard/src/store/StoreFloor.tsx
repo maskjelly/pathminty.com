@@ -27,6 +27,7 @@ export function StoreFloor({
   recs,
   demo,
   onOpenPage,
+  onSeeAllPages,
   onWatch,
   onUseSample,
 }: {
@@ -36,6 +37,7 @@ export function StoreFloor({
   recs: readonly InsightRec[];
   demo: boolean;
   onOpenPage: (route: string) => void;
+  onSeeAllPages: () => void;
   onWatch: (route?: string) => void;
   onUseSample: () => void;
 }) {
@@ -157,10 +159,14 @@ export function StoreFloor({
       ) : null}
 
       {leftover > 0 ? (
-        <p className="store-more">
-          {leftover} more pages in range — open a step to inspect one.
-        </p>
-      ) : null}
+        <button className="store-watch-link" onClick={onSeeAllPages} type="button">
+          {leftover} more pages on the map
+        </button>
+      ) : (
+        <button className="store-watch-link" onClick={onSeeAllPages} type="button">
+          Open the full page map
+        </button>
+      )}
 
       {verdict ? (
         <button className="store-watch-link" onClick={() => onWatch()} type="button">

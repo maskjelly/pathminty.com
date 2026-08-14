@@ -329,6 +329,10 @@ body {
   flex-direction: column;
   overflow: hidden;
 }
+.live-workspace[data-store="true"] .canvas-stage {
+  flex: 1;
+  min-height: 0;
+}
 .live-workspace[data-canvas="true"] .topbar {
   display: none;
 }
