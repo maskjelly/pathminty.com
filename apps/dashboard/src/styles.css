@@ -1765,6 +1765,15 @@ body {
   padding: 16px 20px 48px;
   max-width: 1180px;
 }
+.insights-demo-banner {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid #00ba7c66;
+  border-radius: 6px;
+  color: var(--text);
+  background: #00ba7c14;
+  font-size: 13px;
+}
 .insights-head {
   display: flex;
   align-items: flex-start;
@@ -1790,6 +1799,18 @@ body {
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.45;
+}
+.insights-head-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.insights-head-actions .control[data-active="true"] {
+  color: #04140e;
+  border-color: var(--green);
+  background: var(--green);
 }
 .insights-grid {
   display: grid;

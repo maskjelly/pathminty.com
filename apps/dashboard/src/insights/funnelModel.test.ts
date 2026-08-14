@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { JourneyGraphResponse, RouteStat } from "@pathminty/contracts";
 
 import {
+  buildDemoFunnelSteps,
   buildFunnelSteps,
   buildInsightRecs,
   buildProductInsights,
@@ -96,5 +97,13 @@ describe("funnel concept model", () => {
     );
     const recs = buildInsightRecs(steps, []);
     expect(recs.some((rec) => /leave|checkout/i.test(rec.title))).toBe(true);
+  });
+
+  it("ships a Heavenly-scale sample funnel for brand pitches", () => {
+    const demo = buildDemoFunnelSteps();
+    expect(demo.map((step) => step.sessions)).toEqual([
+      125_430, 53_620, 23_410, 8_945, 5_234,
+    ]);
+    expect(demo[1]?.fromPrevious).toBeCloseTo(0.427, 2);
   });
 });

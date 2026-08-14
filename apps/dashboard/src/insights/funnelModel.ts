@@ -178,3 +178,108 @@ export function formatPct(value: number | null): string {
   if (value === null || !Number.isFinite(value)) return "—";
   return `${(value * 100).toFixed(1)}%`;
 }
+
+/** Sample brand pitch — not live shop traffic. Numbers match the Heavenly funnel mock. */
+export function buildDemoFunnelSteps(): FunnelStep[] {
+  const counts: Record<FunnelStepId, number> = {
+    home: 125_430,
+    browse: 53_620,
+    product: 23_410,
+    cart: 8_945,
+    checkout: 5_234,
+  };
+  return STEP_META.map((meta, index) => {
+    const sessions = counts[meta.id];
+    const previousId = STEP_META[index - 1]?.id;
+    const previous = previousId ? counts[previousId] : null;
+    const fromPrevious =
+      index === 0 ? 1 : previous && previous > 0 ? sessions / previous : null;
+    const dropOff = fromPrevious === null ? null : 1 - fromPrevious;
+    const dropOffCount =
+      previous && previous > sessions ? previous - sessions : previous ? 0 : null;
+    return {
+      id: meta.id,
+      label: meta.label,
+      sessions,
+      fromPrevious,
+      dropOff,
+      dropOffCount,
+    };
+  });
+}
+
+export function buildDemoProducts(): ProductInsight[] {
+  return [
+    {
+      route: "/products/tailored-linen-blazer",
+      label: "Tailored Linen Blazer",
+      sessions: 8_420,
+      clicks: 28_810,
+      clicksPerVisit: 3.42,
+      checkoutRate: 0.039,
+    },
+    {
+      route: "/products/column-maxi-dress",
+      label: "Column Maxi Dress",
+      sessions: 7_110,
+      clicks: 22_820,
+      clicksPerVisit: 3.21,
+      checkoutRate: 0.0345,
+    },
+    {
+      route: "/products/pleated-midi-dress",
+      label: "Pleated Midi Dress",
+      sessions: 6_040,
+      clicks: 18_600,
+      clicksPerVisit: 3.08,
+      checkoutRate: 0.0328,
+    },
+    {
+      route: "/products/silk-draped-blouse",
+      label: "Silk Draped Blouse",
+      sessions: 5_280,
+      clicks: 15_520,
+      clicksPerVisit: 2.94,
+      checkoutRate: 0.0305,
+    },
+    {
+      route: "/products/leather-top-handle-bag",
+      label: "Leather Top Handle Bag",
+      sessions: 4_910,
+      clicks: 14_090,
+      clicksPerVisit: 2.87,
+      checkoutRate: 0.0291,
+    },
+    {
+      route: "/products/satin-slip-dress",
+      label: "Satin Slip Dress",
+      sessions: 3_200,
+      clicks: 3_840,
+      clicksPerVisit: 1.2,
+      checkoutRate: 0.0098,
+    },
+  ];
+}
+
+export function buildDemoRecs(): InsightRec[] {
+  return [
+    {
+      title: "Browse is where shoppers leave",
+      body: "57.3% drop off after landing before a collection click (71,810 sessions). Filters and nav are the first leak to show a brand.",
+      impact: "high",
+      action: "heatmap",
+    },
+    {
+      title: "Product pages lose more than half",
+      body: "56.4% leave after a product view. In a live shop this is where we open the heatmap on ATC and size selectors.",
+      impact: "high",
+      action: "heatmap",
+    },
+    {
+      title: "Cart to checkout still leaks",
+      body: "41.4% of carts never reach checkout. Recordings of that step are what we play in a pitch.",
+      impact: "medium",
+      action: "recordings",
+    },
+  ];
+}

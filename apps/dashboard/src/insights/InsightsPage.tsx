@@ -11,6 +11,9 @@ import type { JourneyGraphResponse, RouteStat } from "@pathminty/contracts";
 import { useMemo, useState } from "react";
 
 import {
+  buildDemoFunnelSteps,
+  buildDemoProducts,
+  buildDemoRecs,
   buildFunnelSteps,
   buildInsightRecs,
   buildProductInsights,
@@ -38,12 +41,19 @@ export function InsightsPage({
   onOpenRecordings: () => void;
 }) {
   const [pane, setPane] = useState<"funnel" | "products">("funnel");
-  const steps = useMemo(() => buildFunnelSteps(routes, journey), [routes, journey]);
-  const products = useMemo(
+  const [demo, setDemo] = useState(false);
+  const liveSteps = useMemo(() => buildFunnelSteps(routes, journey), [routes, journey]);
+  const liveProducts = useMemo(
     () => buildProductInsights(routes, journey),
     [routes, journey],
   );
-  const recs = useMemo(() => buildInsightRecs(steps, products), [steps, products]);
+  const liveRecs = useMemo(
+    () => buildInsightRecs(liveSteps, liveProducts),
+    [liveSteps, liveProducts],
+  );
+  const steps = demo ? buildDemoFunnelSteps() : liveSteps;
+  const products = demo ? buildDemoProducts() : liveProducts;
+  const recs = demo ? buildDemoRecs() : liveRecs;
   const home = steps[0]?.sessions ?? 0;
   const checkout = steps.find((step) => step.id === "checkout")?.sessions ?? 0;
   const reached = home > 0 ? checkout / home : null;
@@ -55,31 +65,48 @@ export function InsightsPage({
     .slice(0, 5);
 
   return (
-    <div className="insights">
+    <div className="insights" data-demo={demo ? "true" : "false"}>
+      {demo ? (
+        <p className="insights-demo-banner" role="status">
+          Sample brand data for demos. This is not this shop. Click{" "}
+          <strong>Show real data</strong> to switch back.
+        </p>
+      ) : null}
       <header className="insights-head">
         <div>
-          <p>Concept</p>
+          <p>{demo ? "Sample preview" : "This shop"}</p>
           <h2>Funnel & merchandising</h2>
           <span>
-            Built from PathMinty journeys. Checkout means reached checkout — not a
-            verified purchase. No revenue until order join is on.
+            {demo
+              ? "Sample brand data for pitches. Not this shop. Toggle off to show live PathMinty numbers."
+              : "Built from PathMinty journeys. Checkout means reached checkout — not a verified purchase."}
           </span>
         </div>
-        <div className="mode-switch" aria-label="Insights pane">
+        <div className="insights-head-actions">
           <button
-            data-active={pane === "funnel"}
-            onClick={() => setPane("funnel")}
+            className="control"
+            data-active={demo ? "true" : "false"}
+            onClick={() => setDemo((current) => !current)}
             type="button"
           >
-            Funnel
+            {demo ? "Show real data" : "Test with sample data"}
           </button>
-          <button
-            data-active={pane === "products"}
-            onClick={() => setPane("products")}
-            type="button"
-          >
-            Products
-          </button>
+          <div className="mode-switch" aria-label="Insights pane">
+            <button
+              data-active={pane === "funnel"}
+              onClick={() => setPane("funnel")}
+              type="button"
+            >
+              Funnel
+            </button>
+            <button
+              data-active={pane === "products"}
+              onClick={() => setPane("products")}
+              type="button"
+            >
+              Products
+            </button>
+          </div>
         </div>
       </header>
 
@@ -153,6 +180,7 @@ export function InsightsPage({
                     <span>{rec.body}</span>
                     <button
                       className="control"
+                      disabled={demo}
                       onClick={() =>
                         rec.action === "recordings"
                           ? onOpenRecordings()
@@ -160,7 +188,11 @@ export function InsightsPage({
                       }
                       type="button"
                     >
-                      {rec.action === "recordings" ? "View recordings" : "View heatmap"}
+                      {demo
+                        ? "Sample only"
+                        : rec.action === "recordings"
+                          ? "View recordings"
+                          : "View heatmap"}
                     </button>
                   </article>
                 ))
@@ -211,6 +243,7 @@ export function InsightsPage({
                       <td>
                         <button
                           className="insights-link"
+                          disabled={demo}
                           onClick={() => onOpenHeatmap(product.route)}
                           type="button"
                         >
@@ -244,10 +277,11 @@ export function InsightsPage({
                     </span>
                     <button
                       className="control"
+                      disabled={demo}
                       onClick={() => onOpenHeatmap(product.route)}
                       type="button"
                     >
-                      View heatmap
+                      {demo ? "Sample only" : "View heatmap"}
                     </button>
                   </article>
                 ))
