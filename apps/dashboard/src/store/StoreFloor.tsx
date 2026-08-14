@@ -1,15 +1,18 @@
 import type {
+  HeatmapMode,
   HeatmapResponse,
   JourneyGraphResponse,
   RouteStat,
 } from "@pathminty/contracts";
 
+import { HeatmapSurface } from "../components/HeatmapSurface";
 import { RouteCardPreview } from "../components/RouteCardPreview";
 import { formatPct, type InsightRec } from "../insights/funnelModel";
 import { displayRouteLabel } from "../siteCanvasLayout";
 import {
   buildDemoSpine,
   buildStoreSpine,
+  pickHomeRoute,
   storeCanDraw,
   type SpinePage,
 } from "./storeModel";
@@ -20,10 +23,19 @@ function leakTone(page: SpinePage): "high" | "mid" | "none" {
   return "mid";
 }
 
+function modeLabel(mode: HeatmapMode) {
+  if (mode === "hover") return "Hover heatmap";
+  if (mode === "scroll") return "Scroll heatmap";
+  return "Click heatmap";
+}
+
 export function StoreFloor({
   routes,
   journey,
   heatmaps,
+  homeHeatmap,
+  homeLoading,
+  heatmapMode,
   recs,
   demo,
   onOpenPage,
@@ -34,6 +46,9 @@ export function StoreFloor({
   routes: readonly RouteStat[];
   journey: JourneyGraphResponse | null;
   heatmaps: Record<string, HeatmapResponse>;
+  homeHeatmap: HeatmapResponse | null;
+  homeLoading: boolean;
+  heatmapMode: HeatmapMode;
   recs: readonly InsightRec[];
   demo: boolean;
   onOpenPage: (route: string) => void;
@@ -48,66 +63,79 @@ export function StoreFloor({
     : Math.max(0, routes.length - new Set(spine.map((page) => page.route)).size);
   const sources = demo ? [] : (journey?.acquisitions ?? []).slice(0, 3);
   const verdict = recs[0];
+  const homeRoute = demo ? "/" : pickHomeRoute(routes, journey);
+  const homeStop = spine.find((page) => page.id === "home");
+  const homeHeat = homeHeatmap ?? heatmaps[homeRoute] ?? null;
   const liveHits = spine.filter((page) => page.sessions > 0);
-
-  if (!drawable) {
-    const lonely = liveHits[0];
-    return (
-      <section className="store-sparse">
-        {lonely ? (
-          <button
-            className="store-page is-lonely"
-            onClick={() => onOpenPage(lonely.route)}
-            type="button"
-          >
-            <span className="store-page-url">{lonely.route}</span>
-            <span className="store-page-preview">
-              <RouteCardPreview active heatmap={heatmaps[lonely.route]} />
-            </span>
-            <span className="store-page-meta">
-              <strong>{lonely.label}</strong>
-              <b>{lonely.sessions.toLocaleString()}</b>
-            </span>
-          </button>
-        ) : null}
-        <h1>Not a path yet.</h1>
-        <p>
-          {liveHits.length === 0
-            ? "No journey volume in this range."
-            : `${liveHits
-                .map((page) => `${page.sessions.toLocaleString()} on ${page.label}`)
-                .join(", ")}. Need traffic on at least two steps.`}
-        </p>
-        <button className="store-heat-btn" onClick={onUseSample} type="button">
-          Test with sample data
-        </button>
-      </section>
-    );
-  }
 
   return (
     <section className="store-floor">
-      <div className="store-verdict">
-        <p>{demo ? "Sample preview" : "What to fix first"}</p>
-        <h1>
-          {verdict ? (
-            <>
-              {verdict.title}. <em>{verdict.body.split(".")[0]}.</em>
-            </>
+      <div className="store-hero">
+        <div className="store-verdict">
+          <p>{demo ? "Sample preview" : modeLabel(heatmapMode)}</p>
+          <h1>
+            Home. <em>Where shoppers tap first.</em>
+          </h1>
+          <span>
+            {demo
+              ? "Sample heat on a homepage so you can see the product."
+              : homeHeat
+                ? `${homeHeat.sessionCount.toLocaleString()} sessions · ${homeHeat.eventCount.toLocaleString()} ${
+                    heatmapMode === "hover" ? "attention samples" : "clicks"
+                  } on ${homeRoute}`
+                : homeStop && homeStop.sessions > 0
+                  ? `${homeStop.sessions.toLocaleString()} homepage sessions — heat is loading.`
+                  : "Homepage heat shows up as soon as someone lands on / with consent."}
+          </span>
+          <div className="store-hero-actions">
+            <button
+              className="store-heat-btn"
+              onClick={() => onOpenPage(homeRoute)}
+              type="button"
+            >
+              Open Home heatmap
+            </button>
+            <button
+              className="control"
+              onClick={() => onWatch(homeRoute)}
+              type="button"
+            >
+              Watch Home sessions
+            </button>
+          </div>
+        </div>
+        <button
+          className="store-hero-frame"
+          onClick={() => onOpenPage(homeRoute)}
+          type="button"
+        >
+          {demo ? (
+            <img
+              alt="Sample click heatmap on a homepage"
+              src="/assets/heavenly-heatmap.png"
+            />
           ) : (
-            <>{spine[0]?.sessions.toLocaleString() ?? "0"} shoppers on this path.</>
+            <HeatmapSurface heatmap={homeHeat} loading={homeLoading && !homeHeat} />
           )}
-        </h1>
-        {spine[0] ? (
-          <button
-            className="store-heat-btn"
-            onClick={() => onOpenPage(spine[0]!.route)}
-            type="button"
-          >
-            Open {spine[0].label}
-          </button>
-        ) : null}
+        </button>
       </div>
+
+      {!drawable ? (
+        <p className="store-more">
+          {liveHits.filter((page) => page.id !== "home").length === 0
+            ? "Not a path yet — stay on Home until another step has traffic."
+            : `${liveHits
+                .map((page) => `${page.sessions.toLocaleString()} on ${page.label}`)
+                .join(", ")}. Need two busy steps to draw the rest of the path.`}{" "}
+          <button className="store-watch-link" onClick={onUseSample} type="button">
+            Test with sample data
+          </button>
+        </p>
+      ) : verdict ? (
+        <p className="store-more">
+          {verdict.title}. {verdict.body.split(".")[0]}.
+        </p>
+      ) : null}
 
       <div className="store-path">
         {spine.map((page, index) => (

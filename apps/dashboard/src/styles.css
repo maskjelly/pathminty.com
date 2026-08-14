@@ -2092,9 +2092,63 @@ body {
 .store-floor {
   padding: 36px 40px 48px;
 }
+.store-hero {
+  display: grid;
+  grid-template-columns: minmax(240px, 0.85fr) minmax(0, 1.35fr);
+  gap: 24px;
+  align-items: start;
+  margin-bottom: 24px;
+}
 .store-verdict {
   max-width: 760px;
   margin-bottom: 28px;
+}
+.store-hero .store-verdict {
+  margin-bottom: 0;
+}
+.store-verdict span {
+  display: block;
+  margin-top: 10px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.45;
+}
+.store-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+.store-hero-actions .store-heat-btn {
+  margin-top: 0;
+}
+.store-hero-frame {
+  display: block;
+  width: 100%;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: #111;
+  text-align: left;
+  cursor: pointer;
+}
+.store-hero-frame img {
+  display: block;
+  width: 100%;
+  height: 420px;
+  object-fit: cover;
+  object-position: top;
+}
+.store-hero-frame .live-heatmap {
+  background: #0e1014;
+}
+.store-hero-frame .heatmap-stage {
+  max-height: 420px;
+}
+.store-hero-frame .live-browser-bar,
+.store-hero-frame .heatmap-footer {
+  pointer-events: none;
 }
 .store-verdict p {
   margin: 0 0 8px;
@@ -2377,6 +2431,9 @@ body {
   position: relative;
 }
 @media (max-width: 900px) {
+  .store-hero {
+    grid-template-columns: 1fr;
+  }
   .store-verdict h1,
   .store-sparse h1 {
     font-size: 28px;

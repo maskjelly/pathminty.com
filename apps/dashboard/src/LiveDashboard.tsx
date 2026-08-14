@@ -56,7 +56,12 @@ import {
   buildInsightRecs,
   buildProductInsights,
 } from "./insights/funnelModel";
-import { displayRouteLabel, isHomeRoute, pinHomePath } from "./siteCanvasLayout";
+import {
+  displayRouteLabel,
+  isHomeRoute,
+  pinHomePath,
+  resolveHomeRoute,
+} from "./siteCanvasLayout";
 import { StoreFloor } from "./store/StoreFloor";
 
 type Surface = "store" | "map" | "insights" | "recordings" | "settings";
@@ -221,6 +226,8 @@ export function LiveDashboard() {
   const [scrubIndex, setScrubIndex] = useState<number | null>(null);
   const [heatmap, setHeatmap] = useState<HeatmapResponse | null>(null);
   const [heatmapLoading, setHeatmapLoading] = useState(false);
+  const [homeHeatmap, setHomeHeatmap] = useState<HeatmapResponse | null>(null);
+  const [homeHeatLoading, setHomeHeatLoading] = useState(false);
   const [mapLoading, setMapLoading] = useState(false);
   const [journey, setJourney] = useState<JourneyGraphResponse | null>(null);
   const [replay, setReplay] = useState<ReplaySessionResponse | null>(null);
@@ -370,6 +377,38 @@ export function LiveDashboard() {
     },
     [device, journey?.nodes, routeIndex?.routes, timeQuery],
   );
+
+  // Store home always loads the shop homepage heatmap, even if the path is quiet.
+  useEffect(() => {
+    if (!shopId || surface !== "store") return;
+    const home = resolveHomeRoute(
+      routeIndex?.routes.map((item) => item.route) ?? ["/"],
+      (journey?.nodes ?? []).map((node) => node.route),
+    );
+    let cancelled = false;
+    setHomeHeatLoading(true);
+    void getHeatmap(shopId, {
+      route: home,
+      device,
+      mode: heatmapMode,
+      time: timeQuery,
+      snapshot: true,
+    })
+      .then((result) => {
+        if (cancelled) return;
+        setHomeHeatmap(result);
+        setMiniHeatmaps((previous) => mergeHeatmaps(previous, [result], false));
+      })
+      .catch(() => {
+        if (!cancelled) setHomeHeatmap(null);
+      })
+      .finally(() => {
+        if (!cancelled) setHomeHeatLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [shopId, surface, device, heatmapMode, timeQuery, routeIndex, journey?.nodes]);
 
   // Route-scoped timeline while drilling into a page heatmap.
   useEffect(() => {
@@ -921,7 +960,10 @@ export function LiveDashboard() {
             ) : (
               <StoreFloor
                 demo={demo}
+                heatmapMode={heatmapMode}
                 heatmaps={miniHeatmaps}
+                homeHeatmap={homeHeatmap}
+                homeLoading={homeHeatLoading}
                 journey={journey}
                 onOpenPage={openPage}
                 onSeeAllPages={() => goSurface("map")}

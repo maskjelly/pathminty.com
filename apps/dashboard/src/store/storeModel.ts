@@ -7,7 +7,12 @@ import {
   drawnFunnelSteps,
   type FunnelStepId,
 } from "../insights/funnelModel";
-import { classifyRoute, type StationKind } from "../siteCanvasLayout";
+import {
+  classifyRoute,
+  isHomeRoute,
+  resolveHomeRoute,
+  type StationKind,
+} from "../siteCanvasLayout";
 
 export type SpinePage = {
   id: FunnelStepId;
@@ -26,6 +31,16 @@ function kindsForStep(id: FunnelStepId): StationKind[] {
   if (id === "cart") return ["cart"];
   if (id === "checkout") return ["checkout"];
   return [];
+}
+
+export function pickHomeRoute(
+  routes: readonly RouteStat[],
+  journey: JourneyGraphResponse | null,
+): string {
+  return resolveHomeRoute(
+    routes.map((route) => route.route),
+    (journey?.nodes ?? []).map((node) => node.route),
+  );
 }
 
 function demoRouteFor(id: FunnelStepId): string {
@@ -57,6 +72,21 @@ export function buildStoreSpine(
       fromPrevious: step.fromPrevious,
       dropOff: step.dropOff,
       dropOffCount: step.dropOffCount,
+    });
+  }
+  if (!pages.some((page) => page.id === "home")) {
+    const homeRoute = pickHomeRoute(routes, journey);
+    const homeStat =
+      routes.find((route) => route.route === homeRoute) ??
+      routes.find((route) => isHomeRoute(route.route));
+    pages.unshift({
+      id: "home",
+      label: "Home",
+      route: homeStat?.route ?? homeRoute,
+      sessions: homeStat?.sessionCount ?? 0,
+      fromPrevious: 1,
+      dropOff: 0,
+      dropOffCount: 0,
     });
   }
   return pages;

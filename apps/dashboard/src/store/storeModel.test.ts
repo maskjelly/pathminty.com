@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { JourneyGraphResponse, RouteStat } from "@pathminty/contracts";
 
-import { buildStoreSpine, storeCanDraw } from "./storeModel";
+import { buildStoreSpine, pickHomeRoute, storeCanDraw } from "./storeModel";
 
 function route(path: string, sessionCount: number): RouteStat {
   return {
@@ -37,7 +37,20 @@ describe("store spine", () => {
   it("does not draw a path from two product sessions", () => {
     const routes = [route("/products/tee", 2)];
     expect(storeCanDraw(routes, null)).toBe(false);
-    expect(buildStoreSpine(routes, null).map((page) => page.id)).toEqual(["product"]);
+    expect(buildStoreSpine(routes, null).map((page) => page.id)).toEqual([
+      "home",
+      "product",
+    ]);
+  });
+
+  it("always pins Home on the spine", () => {
+    const routes = [route("/products/tee", 40)];
+    expect(pickHomeRoute(routes, null)).toBe("/");
+    expect(buildStoreSpine(routes, null)[0]).toMatchObject({
+      id: "home",
+      route: "/",
+      sessions: 0,
+    });
   });
 
   it("builds home → product and skips empty collection", () => {
